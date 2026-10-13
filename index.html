@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Ragdoll Duel - MVP</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+
+<body>
+  <div id="ui">
+    <div id="top-bar">
+      <div id="score">
+        <span id="p1-score">0</span>
+        <span class="vs">:</span>
+        <span id="p2-score">0</span>
+      </div>
+      <div id="timer">60</div>
+      <div id="title">Ragdoll Duel — MVP</div>
+    </div>
+
+    <div id="center-ui">
+      <div id="goal-text" class="hidden"></div>
+      <div id="game-over" class="hidden">
+        <h1>ИГРА ОКОНЧЕНА</h1>
+        <p id="winner-text">Победитель: —</p>
+        <button id="restart-btn">RESTART</button>
+      </div>
+      <div id="start-text">Нажми SPACE чтобы начать</div>
+    </div>
+
+    <div id="controls-hint">
+      <span>P1: W A D</span>
+      <span>P2: ← ↑ →</span>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <!-- Matter.js CDN -->
+  <script src="https://unpkg.com/matter-js@0.19.0/build/matter.min.js"></script>
+  <script src="./js/main.js"></script>
+</body>
+
+</html>
