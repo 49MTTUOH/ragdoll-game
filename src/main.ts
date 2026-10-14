@@ -7,7 +7,6 @@ const p2ScoreEl = document.getElementById("p2-score") as HTMLElement;
 const timerEl = document.getElementById("timer") as HTMLElement;
 const goalTextEl = document.getElementById("goal-text") as HTMLElement;
 const gameOverEl = document.getElementById("game-over") as HTMLElement;
-const winnerTextEl = document.getElementById("winner-text") as HTMLElement;
 const startScreenEl = document.getElementById("start-screen") as HTMLElement;
 const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 const restartBtn = document.getElementById("restart-btn") as HTMLButtonElement;
@@ -17,6 +16,9 @@ const GROUND_HEIGHT = 60;
 const GOAL_WIDTH = 60;
 const GOAL_HEIGHT = 120;
 const BALL_RADIUS = 20;
+const GROUND_JUMP_ZONE = 60; // зона у земли, в которой можно прыгнуть
+const PHASE_CHANGE_AT = 60; // сколько секунд осталось, когда ворота поднимаются вверх
+const MATCH_DURATION = 120; // длительность матча в секундах
 
 class RagdollGame {
   private engine: Engine;
@@ -40,12 +42,15 @@ class RagdollGame {
   private ball!: Body;
   
   private score = { p1: 0, p2: 0 };
-  private timeLeft = 60;
+  private timeLeft = 120;
   private timerId: number | null = null;
   private running = false;
   private gameEnded = false;
   private paused = false;
   private keys = new Set<string>();
+  private goalsUp = false;
+  private jumpVelocity = -18; // скорость прыжка (отрицательная = вверх)
+  private jumpQueued = { p1: false, p2: false };
 
   constructor() {
     this.engine = Engine.create({ gravity: { x: 0, y: 1.2 } });
@@ -95,7 +100,7 @@ class RagdollGame {
       isStatic: true, render: { fillStyle: "#1b5e2f" } 
     });
 
-    const goalY = height - GROUND_HEIGHT - GOAL_HEIGHT / 2;
+    const goalY = this.getGoalYBottom();
     
     // ЛЕВЫЕ ВОРОТА
     this.goalLeftPost = Bodies.rectangle(GOAL_WIDTH / 2, goalY, 15, GOAL_HEIGHT, { 
@@ -130,6 +135,37 @@ class RagdollGame {
       this.goalLeftPost, this.goalLeftTopBar, this.goalRightPost, this.goalRightTopBar,
       this.goalLeftSensor, this.goalRightSensor
     ]);
+  }
+
+  private getGoalYBottom(): number {
+    return window.innerHeight - GROUND_HEIGHT - GOAL_HEIGHT / 2;
+  }
+
+  private getGoalYTop(): number {
+    return window.innerHeight / 2;
+  }
+
+  private setGoalPositions(goalY: number) {
+    const width = window.innerWidth;
+    Body.setPosition(this.goalLeftPost, { x: GOAL_WIDTH / 2, y: goalY });
+    Body.setPosition(this.goalLeftTopBar, { x: GOAL_WIDTH / 2, y: goalY - GOAL_HEIGHT / 2 });
+    Body.setPosition(this.goalLeftSensor, { x: GOAL_WIDTH / 2, y: goalY + 20 });
+    Body.setPosition(this.goalRightPost, { x: width - GOAL_WIDTH / 2, y: goalY });
+    Body.setPosition(this.goalRightTopBar, { x: width - GOAL_WIDTH / 2, y: goalY - GOAL_HEIGHT / 2 });
+    Body.setPosition(this.goalRightSensor, { x: width - GOAL_WIDTH / 2, y: goalY + 20 });
+  }
+
+  private setGoalsUp() {
+    this.goalsUp = true;
+    this.jumpVelocity = -24;
+    this.setGoalPositions(this.getGoalYTop());
+    this.showGoal("ВОРОТА ПОДНЯЛИСЬ!");
+  }
+
+  private setGoalsDown() {
+    this.goalsUp = false;
+    this.jumpVelocity = -18;
+    this.setGoalPositions(this.getGoalYBottom());
   }
 
   private setupBall() {
@@ -204,14 +240,29 @@ class RagdollGame {
 
   private startTimer() {
     if (this.timerId) clearInterval(this.timerId);
-    this.timeLeft = 60;
+    this.timeLeft = MATCH_DURATION;
     timerEl.textContent = this.timeLeft.toString();
     this.timerId = window.setInterval(() => {
       if (!this.running || this.gameEnded || this.paused) return;
       this.timeLeft--;
       timerEl.textContent = this.timeLeft.toString();
-      if (this.timeLeft <= 0) this.endGame();
+      if (this.timeLeft === PHASE_CHANGE_AT && !this.goalsUp) {
+        this.setGoalsUp();
+      }
+      if (this.timeLeft <= 0) this.resetGame();
     }, 1000);
+  }
+
+  private resetGame() {
+    if (this.timerId) clearInterval(this.timerId);
+    this.score = { p1: 0, p2: 0 };
+    p1ScoreEl.textContent = "0";
+    p2ScoreEl.textContent = "0";
+    this.setGoalsDown();
+    this.resetRound();
+    this.running = true;
+    this.gameEnded = false;
+    this.startTimer();
   }
 
   public startGame() {
@@ -226,26 +277,13 @@ class RagdollGame {
     if (!this.running || this.gameEnded) return;
     this.paused = !this.paused;
     if (this.paused) {
+      this.jumpQueued = { p1: false, p2: false };
       Runner.stop(this.runner);
       pauseScreenEl.classList.remove("hidden");
     } else {
       Runner.start(this.runner, this.engine);
       pauseScreenEl.classList.add("hidden");
     }
-  }
-
-  private endGame() {
-    if (this.gameEnded) return;
-    this.gameEnded = true;
-    this.running = false;
-    if (this.timerId) clearInterval(this.timerId);
-    
-    let winner = "Ничья!";
-    if (this.score.p1 > this.score.p2) winner = "🏆 Победил Игрок 1!";
-    else if (this.score.p2 > this.score.p1) winner = "🏆 Победил Игрок 2!";
-    
-    winnerTextEl.textContent = winner;
-    gameOverEl.classList.remove("hidden");
   }
 
   private setupEvents() {
@@ -281,10 +319,9 @@ class RagdollGame {
       const groundY = height - GROUND_HEIGHT;
       
       const moveForce = 0.008;
-      const jumpForce = 0.04;
       
       const isOnGround = (player: { body: Body }) => {
-        return player.body.position.y > groundY - 60;
+        return player.body.position.y > groundY - GROUND_JUMP_ZONE;
       };
       
       const uprightTorque = 0.0008;
@@ -311,9 +348,10 @@ class RagdollGame {
       if (this.keys.has("KeyD")) {
         Body.applyForce(this.player1.body, this.player1.body.position, { x: moveForce, y: 0 });
       }
-      if (this.keys.has("KeyW") && isOnGround(this.player1)) {
-        Body.applyForce(this.player1.body, this.player1.body.position, { x: 0, y: -jumpForce });
+      if (this.jumpQueued.p1 && isOnGround(this.player1)) {
+        Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
       }
+      this.jumpQueued.p1 = false;
       
       if (this.keys.has("ArrowLeft")) {
         Body.applyForce(this.player2.body, this.player2.body.position, { x: -moveForce, y: 0 });
@@ -321,9 +359,10 @@ class RagdollGame {
       if (this.keys.has("ArrowRight")) {
         Body.applyForce(this.player2.body, this.player2.body.position, { x: moveForce, y: 0 });
       }
-      if (this.keys.has("ArrowUp") && isOnGround(this.player2)) {
-        Body.applyForce(this.player2.body, this.player2.body.position, { x: 0, y: -jumpForce });
+      if (this.jumpQueued.p2 && isOnGround(this.player2)) {
+        Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
       }
+      this.jumpQueued.p2 = false;
       
       [this.player1.body, this.player2.body].forEach(p => {
         if (p.velocity.x > 8) Body.setVelocity(p, { x: 8, y: p.velocity.y });
@@ -349,6 +388,10 @@ class RagdollGame {
         this.togglePause();
         return;
       }
+      if (!this.keys.has(e.code)) {
+        if (e.code === "KeyW") this.jumpQueued.p1 = true;
+        if (e.code === "ArrowUp") this.jumpQueued.p2 = true;
+      }
       this.keys.add(e.code);
     });
     
@@ -369,7 +412,8 @@ class RagdollGame {
       gameOverEl.classList.add("hidden");
       startScreenEl.classList.remove("hidden");
       if (this.timerId) clearInterval(this.timerId);
-      timerEl.textContent = "60";
+      timerEl.textContent = MATCH_DURATION.toString();
+      this.setGoalsDown();
       this.resetRound();
     });
   }
