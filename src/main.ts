@@ -11,13 +11,14 @@ const startScreenEl = document.getElementById("start-screen") as HTMLElement;
 const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 const restartBtn = document.getElementById("restart-btn") as HTMLButtonElement;
 const pauseScreenEl = document.getElementById("pause-screen") as HTMLElement;
+const winnerTextEl = document.getElementById("winner-text") as HTMLElement;
 
 const GROUND_HEIGHT = 60;
 const GOAL_WIDTH = 60;
 const GOAL_HEIGHT = 120;
 const BALL_RADIUS = 20;
 const GROUND_JUMP_ZONE = 60; // зона у земли, в которой можно прыгнуть
-const PHASE_CHANGE_AT = 60; // сколько секунд осталось, когда ворота поднимаются вверх
+const GOALS_TO_PHASE_2 = 4; // сколько голов нужно, чтобы ворота поднялись (фаза 2)
 const MATCH_DURATION = 120; // длительность матча в секундах
 
 class RagdollGame {
@@ -36,6 +37,8 @@ class RagdollGame {
   private goalRightTopBar!: Body;
   private goalLeftSensor!: Body;
   private goalRightSensor!: Body;
+  private goalLeftBackWall!: Body;
+  private goalRightBackWall!: Body;
   
   private player1!: { body: Body; color: string };
   private player2!: { body: Body; color: string };
@@ -44,6 +47,7 @@ class RagdollGame {
   private score = { p1: 0, p2: 0 };
   private timeLeft = 120;
   private timerId: number | null = null;
+  private phaseChangeTimeout: number | null = null;
   private running = false;
   private gameEnded = false;
   private paused = false;
@@ -125,15 +129,24 @@ class RagdollGame {
       isStatic: true, render: { fillStyle: "#ffffff" }, label: "goalPost" 
     });
     
-    this.goalRightSensor = Bodies.rectangle(width - GOAL_WIDTH / 2, goalY + 20, 30, GOAL_HEIGHT - 40, { 
-      isStatic: true, isSensor: true, label: "goalRightSensor", 
-      render: { fillStyle: "rgba(0,255,0,0.3)" } 
+    this.goalRightSensor = Bodies.rectangle(width - GOAL_WIDTH / 2, goalY + 20, 30, GOAL_HEIGHT - 40, {
+      isStatic: true, isSensor: true, label: "goalRightSensor",
+      render: { fillStyle: "rgba(0,255,0,0.3)" }
+    });
+
+    // Невидимые стены за воротами (закрывают проём, когда ворота подняты вверх)
+    this.goalLeftBackWall = Bodies.rectangle(-10, height - GROUND_HEIGHT, 30, 1, {
+      isStatic: true, render: { visible: false }, label: "backWall"
+    });
+    this.goalRightBackWall = Bodies.rectangle(width + 10, height - GROUND_HEIGHT, 30, 1, {
+      isStatic: true, render: { visible: false }, label: "backWall"
     });
 
     World.add(this.world, [
       this.ground, this.leftWall, this.rightWall, this.topWall,
       this.goalLeftPost, this.goalLeftTopBar, this.goalRightPost, this.goalRightTopBar,
-      this.goalLeftSensor, this.goalRightSensor
+      this.goalLeftSensor, this.goalRightSensor,
+      this.goalLeftBackWall, this.goalRightBackWall
     ]);
   }
 
@@ -153,6 +166,28 @@ class RagdollGame {
     Body.setPosition(this.goalRightPost, { x: width - GOAL_WIDTH / 2, y: goalY });
     Body.setPosition(this.goalRightTopBar, { x: width - GOAL_WIDTH / 2, y: goalY - GOAL_HEIGHT / 2 });
     Body.setPosition(this.goalRightSensor, { x: width - GOAL_WIDTH / 2, y: goalY + 20 });
+    this.updateBackWalls(goalY);
+  }
+
+  private updateBackWalls(goalY: number) {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const goalBottom = goalY + GOAL_HEIGHT / 2;
+    const groundTop = height - GROUND_HEIGHT;
+    const wallHeight = Math.max(groundTop - goalBottom, 1);
+    const wallCenterY = (goalBottom + groundTop) / 2;
+
+    World.remove(this.world, this.goalLeftBackWall);
+    World.remove(this.world, this.goalRightBackWall);
+
+    this.goalLeftBackWall = Bodies.rectangle(-10, wallCenterY, 30, wallHeight, {
+      isStatic: true, render: { visible: false }, label: "backWall"
+    });
+    this.goalRightBackWall = Bodies.rectangle(width + 10, wallCenterY, 30, wallHeight, {
+      isStatic: true, render: { visible: false }, label: "backWall"
+    });
+
+    World.add(this.world, [this.goalLeftBackWall, this.goalRightBackWall]);
   }
 
   private setGoalsUp() {
@@ -228,6 +263,7 @@ class RagdollGame {
   }
 
   private resetRound() {
+    if (this.gameEnded) return;
     this.spawnPlayers();
     this.resetBall();
   }
@@ -238,6 +274,17 @@ class RagdollGame {
     setTimeout(() => goalTextEl.classList.add("hidden"), 1000);
   }
 
+  private checkPhaseChange() {
+    if (this.goalsUp) return;
+    if (this.score.p1 >= GOALS_TO_PHASE_2 || this.score.p2 >= GOALS_TO_PHASE_2) {
+      if (this.phaseChangeTimeout) clearTimeout(this.phaseChangeTimeout);
+      this.phaseChangeTimeout = window.setTimeout(() => {
+        this.phaseChangeTimeout = null;
+        if (!this.gameEnded && !this.goalsUp) this.setGoalsUp();
+      }, 1500);
+    }
+  }
+
   private startTimer() {
     if (this.timerId) clearInterval(this.timerId);
     this.timeLeft = MATCH_DURATION;
@@ -246,23 +293,28 @@ class RagdollGame {
       if (!this.running || this.gameEnded || this.paused) return;
       this.timeLeft--;
       timerEl.textContent = this.timeLeft.toString();
-      if (this.timeLeft === PHASE_CHANGE_AT && !this.goalsUp) {
-        this.setGoalsUp();
-      }
-      if (this.timeLeft <= 0) this.resetGame();
+      if (this.timeLeft <= 0) this.endMatch();
     }, 1000);
   }
 
-  private resetGame() {
+  private endMatch() {
+    if (this.gameEnded) return;
+    this.gameEnded = true;
+    this.running = false;
     if (this.timerId) clearInterval(this.timerId);
-    this.score = { p1: 0, p2: 0 };
-    p1ScoreEl.textContent = "0";
-    p2ScoreEl.textContent = "0";
-    this.setGoalsDown();
-    this.resetRound();
-    this.running = true;
-    this.gameEnded = false;
-    this.startTimer();
+    if (this.phaseChangeTimeout) {
+      clearTimeout(this.phaseChangeTimeout);
+      this.phaseChangeTimeout = null;
+    }
+
+    if (this.score.p1 > this.score.p2) {
+      winnerTextEl.textContent = "🏆 Победа Игрока 1!";
+    } else if (this.score.p2 > this.score.p1) {
+      winnerTextEl.textContent = "🏆 Победа Игрока 2!";
+    } else {
+      winnerTextEl.textContent = "🤝 Ничья!";
+    }
+    gameOverEl.classList.remove("hidden");
   }
 
   public startGame() {
@@ -292,20 +344,22 @@ class RagdollGame {
       for (let pair of evt.pairs) {
         const a = pair.bodyA, b = pair.bodyB;
         
-        if ((a.label === "ball" && b.label === "goalRightSensor") || 
+        if ((a.label === "ball" && b.label === "goalRightSensor") ||
             (b.label === "ball" && a.label === "goalRightSensor")) {
-          this.score.p1++; 
-          p1ScoreEl.textContent = this.score.p1.toString(); 
+          this.score.p1++;
+          p1ScoreEl.textContent = this.score.p1.toString();
           this.showGoal("ГОЛ! Игрок 1");
+          this.checkPhaseChange();
           setTimeout(() => this.resetRound(), 1500);
           return;
         }
         
-        if ((a.label === "ball" && b.label === "goalLeftSensor") || 
+        if ((a.label === "ball" && b.label === "goalLeftSensor") ||
             (b.label === "ball" && a.label === "goalLeftSensor")) {
-          this.score.p2++; 
-          p2ScoreEl.textContent = this.score.p2.toString(); 
+          this.score.p2++;
+          p2ScoreEl.textContent = this.score.p2.toString();
           this.showGoal(" ГОЛ! Игрок 2");
+          this.checkPhaseChange();
           setTimeout(() => this.resetRound(), 1500);
           return;
         }
@@ -412,6 +466,10 @@ class RagdollGame {
       gameOverEl.classList.add("hidden");
       startScreenEl.classList.remove("hidden");
       if (this.timerId) clearInterval(this.timerId);
+      if (this.phaseChangeTimeout) {
+        clearTimeout(this.phaseChangeTimeout);
+        this.phaseChangeTimeout = null;
+      }
       timerEl.textContent = MATCH_DURATION.toString();
       this.setGoalsDown();
       this.resetRound();
