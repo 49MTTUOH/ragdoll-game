@@ -1,5 +1,5 @@
 import './style.css';
-import { Engine, Render, World, Bodies, Body, Events } from 'matter-js';
+import { Engine, Render, World, Bodies, Body, Events, Runner } from 'matter-js';
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const p1ScoreEl = document.getElementById("p1-score") as HTMLElement;
@@ -11,6 +11,7 @@ const winnerTextEl = document.getElementById("winner-text") as HTMLElement;
 const startScreenEl = document.getElementById("start-screen") as HTMLElement;
 const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 const restartBtn = document.getElementById("restart-btn") as HTMLButtonElement;
+const pauseScreenEl = document.getElementById("pause-screen") as HTMLElement;
 
 const GROUND_HEIGHT = 60;
 const GOAL_WIDTH = 60;
@@ -21,6 +22,7 @@ class RagdollGame {
   private engine: Engine;
   private render: Render;
   private world: World;
+  private runner!: Runner;
   
   private ground!: Body;
   private leftWall!: Body;
@@ -42,6 +44,7 @@ class RagdollGame {
   private timerId: number | null = null;
   private running = false;
   private gameEnded = false;
+  private paused = false;
   private keys = new Set<string>();
 
   constructor() {
@@ -67,7 +70,8 @@ class RagdollGame {
     this.setupInputs();
     
     Render.run(this.render);
-    Engine.run(this.engine);
+    this.runner = Runner.create();
+    Runner.run(this.runner, this.engine);
   }
 
   private setupArena() {
@@ -195,7 +199,7 @@ class RagdollGame {
   private showGoal(text: string) {
     goalTextEl.textContent = text;
     goalTextEl.classList.remove("hidden");
-    setTimeout(() => goalTextEl.classList.add("hidden"), 1500);
+    setTimeout(() => goalTextEl.classList.add("hidden"), 1000);
   }
 
   private startTimer() {
@@ -203,7 +207,7 @@ class RagdollGame {
     this.timeLeft = 60;
     timerEl.textContent = this.timeLeft.toString();
     this.timerId = window.setInterval(() => {
-      if (!this.running || this.gameEnded) return;
+      if (!this.running || this.gameEnded || this.paused) return;
       this.timeLeft--;
       timerEl.textContent = this.timeLeft.toString();
       if (this.timeLeft <= 0) this.endGame();
@@ -216,6 +220,18 @@ class RagdollGame {
     startScreenEl.classList.add("hidden");
     gameOverEl.classList.add("hidden");
     this.startTimer();
+  }
+
+  private togglePause() {
+    if (!this.running || this.gameEnded) return;
+    this.paused = !this.paused;
+    if (this.paused) {
+      Runner.stop(this.runner);
+      pauseScreenEl.classList.remove("hidden");
+    } else {
+      Runner.start(this.runner, this.engine);
+      pauseScreenEl.classList.add("hidden");
+    }
   }
 
   private endGame() {
@@ -234,7 +250,7 @@ class RagdollGame {
 
   private setupEvents() {
     Events.on(this.engine, "collisionStart", (evt) => {
-      if (this.gameEnded) return;
+      if (this.gameEnded || this.paused) return;
       for (let pair of evt.pairs) {
         const a = pair.bodyA, b = pair.bodyB;
         
@@ -259,7 +275,7 @@ class RagdollGame {
     });
 
     Events.on(this.engine, "beforeUpdate", () => {
-      if (!this.running || this.gameEnded) return;
+      if (!this.running || this.gameEnded || this.paused) return;
       
       const height = window.innerHeight;
       const groundY = height - GROUND_HEIGHT;
@@ -323,10 +339,15 @@ class RagdollGame {
 
   private setupInputs() {
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Space") { 
-        e.preventDefault(); 
-        if (!this.running && !this.gameEnded) this.startGame(); 
-        return; 
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!this.running && !this.gameEnded) this.startGame();
+        return;
+      }
+      if (e.code === "Escape") {
+        e.preventDefault();
+        this.togglePause();
+        return;
       }
       this.keys.add(e.code);
     });
@@ -339,10 +360,12 @@ class RagdollGame {
     
     restartBtn.addEventListener("click", () => {
       this.score = { p1: 0, p2: 0 };
-      p1ScoreEl.textContent = "0"; 
+      p1ScoreEl.textContent = "0";
       p2ScoreEl.textContent = "0";
-      this.gameEnded = false; 
+      this.gameEnded = false;
       this.running = false;
+      this.paused = false;
+      pauseScreenEl.classList.add("hidden");
       gameOverEl.classList.add("hidden");
       startScreenEl.classList.remove("hidden");
       if (this.timerId) clearInterval(this.timerId);
