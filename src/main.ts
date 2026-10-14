@@ -1,3 +1,4 @@
+import './style.css';
 import { Engine, Render, World, Bodies, Body, Events } from 'matter-js';
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
