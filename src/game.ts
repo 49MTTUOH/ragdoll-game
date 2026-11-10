@@ -40,6 +40,8 @@ import {
   PLAYER_SPAWN_OFFSET_Y,
   TIMER_INTERVAL_MS,
   GOAL_RESET_DELAY_MS,
+  GOAL_SLOWMO_TIME_SCALE,
+  GOAL_SLOWMO_RAMP_MS,
   PHASE_CHANGE_DELAY_MS,
   GOAL_TEXT_DURATION_MS,
   COLORS,
@@ -62,6 +64,7 @@ import {
 } from "./dom";
 import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena } from "./arena";
 import { createPlayer, type Player } from "./player";
+import { burstConfetti, clearConfetti, setConfettiPaused } from "./confetti";
 
 export class RagdollGame {
   // --- Движок и отрисовка ---
@@ -90,6 +93,8 @@ export class RagdollGame {
   private jumpQueued = { p1: false, p2: false }; // запрошенные прыжки (срабатывают при касании земли)
   private goalLocked = false; // заблокирован ли счёт голов (пока идёт сброс раунда после гола)
   private goalResetTimeout: number | null = null; // id таймаута сброса раунда после гола
+  private goalTextTimeout: number | null = null; // id таймаута скрытия надписи «ГОЛ!»
+  private slowmoRafId: number | null = null; // id анимации плавного входа в слоу-мо
 
   constructor() {
     // Создаём физический движок с гравитацией из конфигурации
@@ -200,15 +205,75 @@ export class RagdollGame {
   private resetRound(): void {
     if (this.gameEnded) return;
     this.goalLocked = false; // разблокируем счёт голов — раунд начался заново
+    this.resetTimeScale(); // возвращаем нормальную скорость времени после слоу-мо
+    this.clearGoalCelebration(); // убираем надпись «ГОЛ!» и конфетти
+    this.jumpQueued = { p1: false, p2: false }; // сбрасываем накопленные прыжки
     this.spawnPlayers();
     this.resetBall();
   }
 
+  // Запускает slow-motion после гола: плавно снижает масштаб времени физики.
+  // Замедление действует до сброса раунда (кулдаун перезапуска не меняется).
+  private startGoalSlowmo(): void {
+    this.stopGoalSlowmo();
+    const startTime = performance.now();
+    const fromScale = this.engine.timing.timeScale;
+    const step = (now: number) => {
+      const t = Math.min((now - startTime) / GOAL_SLOWMO_RAMP_MS, 1);
+      this.engine.timing.timeScale = fromScale + (GOAL_SLOWMO_TIME_SCALE - fromScale) * t;
+      this.slowmoRafId = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    this.slowmoRafId = requestAnimationFrame(step);
+  }
+
+  // Возвращает масштаб времени к нормальному (1) и отменяет анимацию замедления.
+  private resetTimeScale(): void {
+    this.stopGoalSlowmo();
+    this.engine.timing.timeScale = 1;
+  }
+
+  // Отменяет активную анимацию входа в слоу-мо (если идёт).
+  private stopGoalSlowmo(): void {
+    if (this.slowmoRafId !== null) {
+      cancelAnimationFrame(this.slowmoRafId);
+      this.slowmoRafId = null;
+    }
+  }
+
+  // Скрывает надпись «ГОЛ!» и снимает анимационный класс празднования.
+  private hideGoalText(): void {
+    if (this.goalTextTimeout) {
+      clearTimeout(this.goalTextTimeout);
+      this.goalTextTimeout = null;
+    }
+    goalTextEl.classList.add("hidden");
+    goalTextEl.classList.remove("goal-celebration");
+  }
+
+  // Полная очистка визуального празднования гола (надпись + конфетти).
+  // Вызывается при сбросе раунда, окончании матча и полном рестарте.
+  private clearGoalCelebration(): void {
+    this.hideGoalText();
+    clearConfetti();
+  }
+
   // Показывает крупную надпись (например, «ГОЛ!») на короткое время.
-  private showGoal(text: string): void {
+  // Если передан accent — включается красочное празднование:
+  // градиентный текст, pop-in, свечение и пульсация в цвете забившего игрока.
+  private showGoal(text: string, accent?: string): void {
+    this.hideGoalText();
     goalTextEl.textContent = text;
+    if (accent) {
+      goalTextEl.style.setProperty("--goal-accent", accent);
+      // Перезапуск CSS-анимации: рефлоу заставляет браузер проиграть её заново
+      void goalTextEl.offsetWidth;
+      goalTextEl.classList.add("goal-celebration");
+    }
     goalTextEl.classList.remove("hidden");
-    setTimeout(() => goalTextEl.classList.add("hidden"), GOAL_TEXT_DURATION_MS);
+    this.goalTextTimeout = window.setTimeout(() => {
+      this.goalTextTimeout = null;
+      this.hideGoalText();
+    }, GOAL_TEXT_DURATION_MS);
   }
 
   // Проверяет, пора ли поднимать ворота (фаза 2).
@@ -241,6 +306,7 @@ export class RagdollGame {
     if (this.gameEnded) return;
     this.gameEnded = true;
     this.running = false;
+    this.resetTimeScale(); // снимаем слоу-мо, если матч закончился во время гола
     if (this.timerId) clearInterval(this.timerId);
     if (this.phaseChangeTimeout) {
       clearTimeout(this.phaseChangeTimeout);
@@ -258,6 +324,7 @@ export class RagdollGame {
     } else {
       winnerTextEl.textContent = UI_TEXT.draw;
     }
+    this.clearGoalCelebration(); // убираем конфетти и надпись, если матч кончился в момент гола
     gameOverEl.classList.remove("hidden");
   }
 
@@ -277,9 +344,13 @@ export class RagdollGame {
     if (this.paused) {
       this.jumpQueued = { p1: false, p2: false };
       Runner.stop(this.runner);
+      setConfettiPaused(true); // замораживаем частицы конфетти
+      document.body.classList.add("paused"); // замирает CSS-анимация надписи
       pauseScreenEl.classList.remove("hidden");
     } else {
       Runner.start(this.runner, this.engine);
+      setConfettiPaused(false);
+      document.body.classList.remove("paused");
       pauseScreenEl.classList.add("hidden");
     }
   }
@@ -301,9 +372,11 @@ export class RagdollGame {
           (b.label === LABELS.ball && a.label === LABELS.goalRightSensor)
         ) {
           this.goalLocked = true;
+          this.startGoalSlowmo(); // включаем слоу-мо на время до сброса раунда
           this.score.p1++;
           p1ScoreEl.textContent = this.score.p1.toString();
-          this.showGoal(UI_TEXT.goalP1);
+          this.showGoal(UI_TEXT.goalP1, PLAYER_1_COLOR); // красочное празднование в цвете Игрока 1
+          burstConfetti("right"); // хлопушки из правых ворот, куда забит мяч
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -319,9 +392,11 @@ export class RagdollGame {
           (b.label === LABELS.ball && a.label === LABELS.goalLeftSensor)
         ) {
           this.goalLocked = true;
+          this.startGoalSlowmo(); // включаем слоу-мо на время до сброса раунда
           this.score.p2++;
           p2ScoreEl.textContent = this.score.p2.toString();
-          this.showGoal(UI_TEXT.goalP2);
+          this.showGoal(UI_TEXT.goalP2, PLAYER_2_COLOR); // красочное празднование в цвете Игрока 2
+          burstConfetti("left"); // хлопушки из левых ворот, куда забит мяч
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -363,29 +438,32 @@ export class RagdollGame {
         }
       });
 
-      // --- Управление Игроком 1 (A / D / W) ---
-      if (this.keys.has(KEYS.player1.left)) {
-        Body.applyForce(this.player1.body, this.player1.body.position, { x: -MOVE_FORCE, y: 0 });
-      }
-      if (this.keys.has(KEYS.player1.right)) {
-        Body.applyForce(this.player1.body, this.player1.body.position, { x: MOVE_FORCE, y: 0 });
-      }
-      if (this.jumpQueued.p1 && isOnGround(this.player1)) {
-        Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
-      }
-      this.jumpQueued.p1 = false;
+      // --- Управление игроками (полностью отключено в состоянии «гол») ---
+      if (!this.goalLocked) {
+        // --- Управление Игроком 1 (A / D / W) ---
+        if (this.keys.has(KEYS.player1.left)) {
+          Body.applyForce(this.player1.body, this.player1.body.position, { x: -MOVE_FORCE, y: 0 });
+        }
+        if (this.keys.has(KEYS.player1.right)) {
+          Body.applyForce(this.player1.body, this.player1.body.position, { x: MOVE_FORCE, y: 0 });
+        }
+        if (this.jumpQueued.p1 && isOnGround(this.player1)) {
+          Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+        }
+        this.jumpQueued.p1 = false;
 
-      // --- Управление Игроком 2 (← / → / ↑) ---
-      if (this.keys.has(KEYS.player2.left)) {
-        Body.applyForce(this.player2.body, this.player2.body.position, { x: -MOVE_FORCE, y: 0 });
+        // --- Управление Игроком 2 (← / → / ↑) ---
+        if (this.keys.has(KEYS.player2.left)) {
+          Body.applyForce(this.player2.body, this.player2.body.position, { x: -MOVE_FORCE, y: 0 });
+        }
+        if (this.keys.has(KEYS.player2.right)) {
+          Body.applyForce(this.player2.body, this.player2.body.position, { x: MOVE_FORCE, y: 0 });
+        }
+        if (this.jumpQueued.p2 && isOnGround(this.player2)) {
+          Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+        }
+        this.jumpQueued.p2 = false;
       }
-      if (this.keys.has(KEYS.player2.right)) {
-        Body.applyForce(this.player2.body, this.player2.body.position, { x: MOVE_FORCE, y: 0 });
-      }
-      if (this.jumpQueued.p2 && isOnGround(this.player2)) {
-        Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
-      }
-      this.jumpQueued.p2 = false;
 
       // Ограничиваем максимальную скорость игроков
       [this.player1.body, this.player2.body].forEach((p) => {
@@ -416,8 +494,9 @@ export class RagdollGame {
         this.togglePause();
         return;
       }
-      // Запоминаем прыжок, если клавиша нажата впервые (чтобы не прыгать повторно при удержании)
-      if (!this.keys.has(e.code)) {
+      // Запоминаем прыжок, если клавиша нажата впервые и сейчас не состояние «гол»
+      // (в слоу-мо после гола ввод игроков игнорируется)
+      if (!this.goalLocked && !this.keys.has(e.code)) {
         if (e.code === KEYS.player1.jump) this.jumpQueued.p1 = true;
         if (e.code === KEYS.player2.jump) this.jumpQueued.p2 = true;
       }
@@ -440,6 +519,9 @@ export class RagdollGame {
       this.running = false;
       this.paused = false;
       this.goalLocked = false;
+      this.clearGoalCelebration(); // сбрасываем надпись «ГОЛ!» и конфетти
+      setConfettiPaused(false);
+      document.body.classList.remove("paused");
       pauseScreenEl.classList.add("hidden");
       gameOverEl.classList.add("hidden");
       startScreenEl.classList.remove("hidden");

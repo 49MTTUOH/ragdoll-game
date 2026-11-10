@@ -30,8 +30,112 @@ canvas { display: block; }
 }
 .hidden { display: none !important; }
 
-h1 { font-size: 64px; margin: 0 0 20px 0; color: #4cc9f0; text-shadow: 0 0 10px #4cc9f0; }
-#pause-screen h1 { color: #fff3cd; text-shadow: 0 0 10px #fff3cd; }
+/* --- Неоновый заголовок игры --- */
+h1 {
+  /* акценты неона (под палитру игры: циан игрока 1 + розовый игрока 2) */
+  --neon-core: #00f0ff;   /* яркое ядро свечения */
+  --neon-a: #00f0ff;      /* градиент: циан */
+  --neon-b: #b14dff;      /* градиент: фиолетовый */
+  --neon-c: #ff2fa0;      /* градиент: неоново-розовый */
+
+  position: relative;
+  font-size: 64px; margin: 0 0 20px 0;
+  letter-spacing: 2px;
+
+  /* Градиентная заливка букв (анимированный шиммер) */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    var(--neon-a) 0%,
+    #7af7ff 14%,
+    var(--neon-b) 32%,
+    #e07bff 48%,
+    var(--neon-c) 62%,
+    #ff8ac2 78%,
+    var(--neon-a) 100%   /* совпадает с началом — шов невидим при цикле */
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+
+  /* Настоящий неоновый glow: несколько слоёв drop-shadow
+     (drop-shadow, а не text-shadow — обводит градиентные буквы,
+      т.к. text-shadow не виден сквозь прозрачную заливку) */
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.9))   /* яркое белое ядро */
+    drop-shadow(0 0 6px rgba(0, 240, 255, 0.85))    /* плотный циановый слой */
+    drop-shadow(0 0 16px rgba(0, 240, 255, 0.55))   /* среднее свечение */
+    drop-shadow(0 0 38px rgba(177, 77, 255, 0.4))   /* широкий фиолетовый ореол */
+    drop-shadow(0 0 70px rgba(255, 47, 160, 0.3));  /* дальний розовый ореол */
+
+  animation:
+    title-shimmer 5s linear infinite,
+    neon-flicker 6s ease-in-out infinite;
+}
+
+/* Плавное переливание градиента по буквам */
+@keyframes title-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 250% 50%; }
+}
+
+/* Мерцание неоновой вывески: лёгкая пульсация + редкие короткие «провалы» */
+@keyframes neon-flicker {
+  0%, 100% { opacity: 1; }
+  3%   { opacity: 0.55; }
+  4%   { opacity: 1; }
+  7%   { opacity: 0.75; }
+  8%   { opacity: 1; }
+  46%  { opacity: 1; }
+  47%  { opacity: 0.6; }
+  48%  { opacity: 1; }
+  72%  { opacity: 0.85; }
+  73%  { opacity: 1; }
+}
+
+/* --- Главный экран (стартовый): сдержанный неон вместо многослойного свечения ---
+   Переопределяет базовый неон h1 только для стартового экрана:
+   - единственный мягкий glow вместо 5 слоёв drop-shadow;
+   - убрано мерцание неоновой вывески (neon-flicker);
+   - шиммер оставлен, но замедлен и приглушён через более спокойные цвета градиента. */
+#start-screen h1 {
+  filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.35));  /* единый мягкий циановый акцент */
+  animation: title-shimmer 9s linear infinite;            /* без neon-flicker, медленнее */
+  background-image: linear-gradient(
+    100deg,
+    var(--neon-a) 0%,
+    #9ae8ef 14%,
+    var(--neon-b) 32%,
+    #cfa3f5 48%,
+    var(--neon-c) 62%,
+    #f0b3d2 78%,
+    var(--neon-a) 100%
+  );
+}
+
+/* Пауза — тёплый неон (янтарь/розовый), чтобы отличался от титульного */
+#pause-screen h1 {
+  --neon-core: #ffb340;
+  --neon-a: #ffb340;
+  --neon-b: #ff2fa0;
+  --neon-c: #b14dff;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 6px rgba(255, 179, 64, 0.85))
+    drop-shadow(0 0 16px rgba(255, 47, 160, 0.55))
+    drop-shadow(0 0 38px rgba(255, 47, 160, 0.4))
+    drop-shadow(0 0 70px rgba(177, 77, 255, 0.3));
+  background-image: linear-gradient(
+    100deg,
+    var(--neon-a) 0%,
+    #ffe08a 14%,
+    var(--neon-b) 40%,
+    #ff8ac2 60%,
+    var(--neon-c) 80%,
+    var(--neon-a) 100%
+  );
+}
 .controls { font-size: 20px; margin-bottom: 30px; text-align: center; line-height: 1.6; }
 .btn { 
   padding: 15px 40px; font-size: 24px; font-weight: bold; color: #111; 
@@ -40,12 +144,120 @@ h1 { font-size: 64px; margin: 0 0 20px 0; color: #4cc9f0; text-shadow: 0 0 10px 
 }
 .btn:hover { transform: scale(1.05); background: #ffe082; }
 
+/* --- Неоновая надпись «ГОЛ!» ---
+   Светящийся контур вместо «расплавленного» свечения: чёткая обводка
+   в цвете забившего игрока (--goal-accent задаётся из game.ts) + компактное
+   свечение (2 слоя), в согласовании с неоновым стилем заголовка h1. */
 #goal-text {
   position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 80px; font-weight: 900; color: #ffeb3b; text-shadow: 4px 4px 0 #d32f2f;
-  animation: pop 0.3s ease-out;
+  font-size: 80px; font-weight: 900; color: #ffffff;
+  letter-spacing: 2px;
+  -webkit-text-stroke: 2px var(--goal-accent, #4cc9f0);  /* светящийся контур */
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 6px var(--goal-accent, #4cc9f0),           /* плотное свечение контура */
+    0 0 16px var(--goal-accent, #4cc9f0),          /* мягкий ореол */
+    2px 2px 4px rgba(0, 0, 0, 0.55);               /* лёгкая глубинная тень */
+  white-space: nowrap;
+  animation:
+    pop 0.3s ease-out,
+    goal-neon-pulse 0.8s ease-in-out infinite;     /* стандартная скорость пульсации */
 }
-@keyframes pop { 
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 
+@keyframes pop {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
+/* Пульсация неонового свечения надписи (по умолчанию — циан Игрока 1) */
+@keyframes goal-neon-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 6px var(--goal-accent, #4cc9f0),
+      0 0 16px var(--goal-accent, #4cc9f0),
+      2px 2px 4px rgba(0, 0, 0, 0.55);
+  }
+  50% {
+    text-shadow:
+      0 0 3px var(--goal-accent, #4cc9f0),
+      0 0 10px var(--goal-accent, #4cc9f0),
+      2px 2px 4px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* --- Красочное празднование гола (градиент + pop-in + светящийся контур) --- */
+#goal-text.goal-celebration {
+  font-size: 130px;
+  letter-spacing: 3px;
+  color: transparent;
+  text-shadow: none;
+  -webkit-text-stroke: 3px #ffffff;        /* чёткий светлый контур под градиентом */
+  -webkit-paint-order: stroke fill;        /* градиентная заливка поверх обводки */
+  paint-order: stroke fill;
+  background-image: linear-gradient(
+    90deg,
+    var(--goal-accent, #ffeb3b) 0%,
+    #ffe066 28%,                 /* ярче #ffd166 */
+    #ffffff 48%,
+    #ffffff 52%,                 /* чуть шире белое ядро блика */
+    #ffe066 72%,
+    var(--goal-accent, #ffeb3b) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* Светящийся контур (не «расплавленное» свечение): белое ядро + 2 компактных
+     слоя свечения в цвете забившего игрока (drop-shadow, т.к. text-shadow не
+     виден сквозь прозрачную градиентную заливку) */
+  filter:
+    saturate(1.25) brightness(1.1)               /* насыщеннее и светлее заливка */
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))         /* яркое белое ядро контура */
+    drop-shadow(0 0 7px var(--goal-accent, #ffeb3b))       /* плотное свечение контура */
+    drop-shadow(0 0 18px var(--goal-accent, #ffeb3b))      /* мягкий ореол */
+    drop-shadow(4px 5px 0 rgba(0, 0, 0, 0.5));             /* лёгкая глубинная тень */
+  animation:
+    goal-pop-in 0.3s cubic-bezier(0.2, 1.75, 0.4, 1) both,
+    goal-shine 0.6s linear infinite,                       /* стандартная скорость */
+    goal-glow-pulse 0.8s ease-in-out infinite;             /* стандартная скорость */
+}
+/* Пружинный «pop-in» с поворотом */
+@keyframes goal-pop-in {
+  0% { transform: translate(-50%, -50%) scale(0.1) rotate(-14deg); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+}
+/* Бегущий блик по градиентному тексту */
+@keyframes goal-shine {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+/* Пульсация неонового свечения празднования (в цвете забившего игрока) */
+@keyframes goal-glow-pulse {
+  0%, 100% {
+    filter:
+      saturate(1.25) brightness(1.1)
+      drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+      drop-shadow(0 0 7px var(--goal-accent, #ffeb3b))
+      drop-shadow(0 0 18px var(--goal-accent, #ffeb3b))
+      drop-shadow(4px 5px 0 rgba(0, 0, 0, 0.5));
+  }
+  50% {
+    filter:
+      saturate(1.25) brightness(1.2)
+      drop-shadow(0 0 2px rgba(255, 255, 255, 1))
+      drop-shadow(0 0 10px var(--goal-accent, #ffeb3b))
+      drop-shadow(0 0 26px var(--goal-accent, #ffeb3b))
+      drop-shadow(4px 5px 0 rgba(0, 0, 0, 0.5));
+  }
+}
+
+/* --- Слой конфетти --- */
+#confetti-layer {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  overflow: hidden; pointer-events: none;
+}
+.confetti {
+  position: absolute; top: 0; left: 0;
+  will-change: transform, opacity;
+}
+
+/* Во время Esc-паузы CSS-анимация надписи замирает
+   (конфетти на WAAPI замирают через anim.pause() в game.ts) */
+body.paused #goal-text.goal-celebration { animation-play-state: paused; }

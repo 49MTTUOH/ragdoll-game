@@ -98,8 +98,29 @@ export const MATCH_DURATION = 120; // длительность матча в с�
 // Задержки и интервалы (в миллисекундах).
 export const TIMER_INTERVAL_MS = 1000; // интервал обновления таймера матча
 export const GOAL_RESET_DELAY_MS = 1500; // пауза после гола перед сбросом раунда
+export const GOAL_SLOWMO_TIME_SCALE = 0.3; // множитель времени при голе (слоу-мо: 0.3 = 30% скорости)
+export const GOAL_SLOWMO_RAMP_MS = 150; // длительность плавного входа в слоу-мо после гола
 export const PHASE_CHANGE_DELAY_MS = 1500; // пауза перед поднятием ворот (фаза 2)
 export const GOAL_TEXT_DURATION_MS = 1000; // сколько показывать надпись «ГОЛ!»
+
+// ---------- КОНФЕТТИ (празднование гола) ----------
+// Визуальный эффект хлопушек при голе. Меняется только внешний вид,
+// на игровую логику не влияет.
+export const CONFETTI_COUNT = 70; // сколько частиц вылетает при одном голе
+export const CONFETTI_COLORS = [
+  "#4cc9f0", // Игрок 1
+  "#ff4d6d", // Игрок 2
+  "#ffd166",
+  "#06d6a0",
+  "#ef476f",
+  "#118ab2",
+  "#ffffff",
+]; // палитра конфетти (цвета игроков + яркие акценты)
+export const CONFETTI_MIN_SPEED = 500; // минимальная начальная скорость частицы (px/s)
+export const CONFETTI_MAX_SPEED = 1100; // максимальная начальная скорость частицы (px/s)
+export const CONFETTI_GRAVITY = 1400; // гравитация частиц (px/s^2)
+export const CONFETTI_MIN_DURATION_MS = 1200; // минимальное время жизни частицы
+export const CONFETTI_MAX_DURATION_MS = 2000; // максимальное время жизни частицы
 
 // ---------- ЦВЕТА ----------
 // Палитра игры. Меняйте здесь — и игра перекрасится.

@@ -16,4 +16,5 @@ export const startScreenEl = document.getElementById("start-screen") as HTMLElem
 export const startBtn = document.getElementById("start-btn") as HTMLButtonElement; // кнопка «Начать»
 export const restartBtn = document.getElementById("restart-btn") as HTMLButtonElement; // кнопка «Играть снова»
 export const pauseScreenEl = document.getElementById("pause-screen") as HTMLElement; // экран паузы
+export const confettiLayerEl = document.getElementById("confetti-layer") as HTMLElement; // слой конфетти (празднование гола)
 export const winnerTextEl = document.getElementById("winner-text") as HTMLElement; // текст победителя
