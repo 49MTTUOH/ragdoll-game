@@ -21,12 +21,13 @@ export const GROUND_FRICTION = 0.8; // трение о землю
 export const GOAL_WIDTH = 60; // ширина ворот
 export const GOAL_HEIGHT = 120; // высота ворот
 export const GOAL_POST_THICKNESS = 15; // толщина боковых стоек
+export const GOAL_SIDE_FILLER_HEIGHT = 20; // высота заглушки в щели у края экрана (прижата к низу ворот)
 export const GOAL_BAR_THICKNESS = 15; // толщина верхней перекладины
 export const GOAL_SENSOR_WIDTH = 30; // ширина датчика гола (невидимой зоны)
 export const GOAL_SENSOR_OFFSET_Y = 20; // смещение датчика вниз от центра ворот
 export const GOAL_SENSOR_HEIGHT_INSET = 40; // насколько датчик короче ворот по высоте
-export const BACK_WALL_THICKNESS = 30; // толщина невидимой стены за воротами
-export const BACK_WALL_EDGE_OFFSET = 10; // насколько стена за воротами выходит за край экрана
+export const BACK_WALL_THICKNESS = 30; // насколько белая стенка под воротами уходит за край экрана (без учёта запаса)
+export const BACK_WALL_EDGE_OFFSET = 10; // дополнительный запас стенки за воротами за краем экрана
 
 // ---------- МЯЧ ----------
 // Физические свойства и стартовая позиция мяча.
@@ -37,6 +38,9 @@ export const BALL_FRICTION_AIR = 0.002; // сопротивление возду
 export const BALL_RESTITUTION = 1.0; // упругость (1.0 = отскакивает без потери энергии)
 export const BALL_DENSITY = 0.0008; // плотность (влияет на массу)
 export const BALL_STROKE_WIDTH = 3; // толщина обводки мяча
+export const BALL_AUTO_BOUNCE_VELOCITY = -15; // скорость подскока мяча, когда он перестал прыгать (отрицательная = вверх)
+export const BALL_AUTO_BOUNCE_ZONE = 60; // зона у земли, в которой мяч подскакивает сам
+export const BALL_AUTO_BOUNCE_SPEED_THRESHOLD = 2; // вертикальная скорость, ниже которой мяч считается «лежащим» на земле
 
 // ---------- ИГРОКИ ----------
 // Параметры ragdoll-персонажей: цвета, стартовые позиции,

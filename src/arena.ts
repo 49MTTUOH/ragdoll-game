@@ -15,6 +15,7 @@ import {
   GOAL_WIDTH,
   GOAL_HEIGHT,
   GOAL_POST_THICKNESS,
+  GOAL_SIDE_FILLER_HEIGHT,
   GOAL_BAR_THICKNESS,
   GOAL_SENSOR_WIDTH,
   GOAL_SENSOR_OFFSET_Y,
@@ -37,8 +38,10 @@ export interface Arena {
   goalRightTopBar: Body; // перекладина правых ворот
   goalLeftSensor: Body; // датчик гола левых ворот
   goalRightSensor: Body; // датчик гола правых ворот
-  goalLeftBackWall: Body; // невидимая стена за левыми воротами
-  goalRightBackWall: Body; // невидимая стена за правыми воротами
+  goalLeftSideFiller: Body; // заглушка в щели между краем экрана и стойкой ворот
+  goalRightSideFiller: Body; // заглушка в щели между краем экрана и стойкой ворот
+  goalLeftBackWall: Body; // невидимая стенка за левым краем экрана (продолжение боковой стены до земли)
+  goalRightBackWall: Body; // невидимая стенка за правым краем экрана (продолжение боковой стены до земли)
 }
 
 // Создаёт все статичные тела арены (землю, стены, ворота).
@@ -114,17 +117,27 @@ export function createArena(width: number, height: number): Arena {
     { isStatic: true, isSensor: true, label: LABELS.goalRightSensor, render: { fillStyle: COLORS.goalRightSensor } }
   );
 
-  // Невидимые стены за воротами (закрывают проём, когда ворота подняты вверх)
-  const goalLeftBackWall = Bodies.rectangle(-BACK_WALL_EDGE_OFFSET, height - GROUND_HEIGHT, BACK_WALL_THICKNESS, 1, {
+  // Заглушка в узкой щели между краем экрана и внутренней гранью стойки:
+  // без неё игрок протискивается в этот «карман» и застревает там.
+  // Ширина ровно равна щели, высота задаётся в config.ts, по вертикали
+  // заглушка прижата к низу ворот (когда ворота опущены — у земли).
+  const goalGapWidth = GOAL_WIDTH / 2 - GOAL_POST_THICKNESS / 2;
+  const goalBottom = goalY + GOAL_HEIGHT / 2;
+  const goalFillerY = goalBottom - GOAL_SIDE_FILLER_HEIGHT / 2;
+  const goalLeftSideFiller = Bodies.rectangle(goalGapWidth / 2, goalFillerY, goalGapWidth, GOAL_SIDE_FILLER_HEIGHT, {
     isStatic: true,
-    render: { visible: false },
+    render: { fillStyle: COLORS.goal },
     label: LABELS.backWall,
   });
-  const goalRightBackWall = Bodies.rectangle(width + BACK_WALL_EDGE_OFFSET, height - GROUND_HEIGHT, BACK_WALL_THICKNESS, 1, {
+  const goalRightSideFiller = Bodies.rectangle(width - goalGapWidth / 2, goalFillerY, goalGapWidth, GOAL_SIDE_FILLER_HEIGHT, {
     isStatic: true,
-    render: { visible: false },
+    render: { fillStyle: COLORS.goal },
     label: LABELS.backWall,
   });
+
+  // Невидимые стенки за краем экрана (не дают выйти за пределы арены
+  // в зоне ворот, где боковые стены не продолжаются до земли)
+  const { goalLeftBackWall, goalRightBackWall } = buildBackWalls(width, height, goalY);
 
   return {
     ground,
@@ -137,6 +150,8 @@ export function createArena(width: number, height: number): Arena {
     goalRightTopBar,
     goalLeftSensor,
     goalRightSensor,
+    goalLeftSideFiller,
+    goalRightSideFiller,
     goalLeftBackWall,
     goalRightBackWall,
   };
@@ -153,7 +168,7 @@ export function getGoalYTop(height: number): number {
 }
 
 // Перемещает ворота (стойки, перекладины, датчики) на заданную высоту.
-// Также перестраивает невидимые стены за воротами.
+// Также перестраивает невидимые стенки за краем экрана.
 export function setGoalPositions(arena: Arena, world: World, width: number, height: number, goalY: number): void {
   Body.setPosition(arena.goalLeftPost, { x: GOAL_WIDTH / 2, y: goalY });
   Body.setPosition(arena.goalLeftTopBar, { x: GOAL_WIDTH / 2, y: goalY - GOAL_HEIGHT / 2 });
@@ -161,33 +176,65 @@ export function setGoalPositions(arena: Arena, world: World, width: number, heig
   Body.setPosition(arena.goalRightPost, { x: width - GOAL_WIDTH / 2, y: goalY });
   Body.setPosition(arena.goalRightTopBar, { x: width - GOAL_WIDTH / 2, y: goalY - GOAL_HEIGHT / 2 });
   Body.setPosition(arena.goalRightSensor, { x: width - GOAL_WIDTH / 2, y: goalY + GOAL_SENSOR_OFFSET_Y });
+  // Заглушки в щели у краёв экрана перемещаются вместе с воротами,
+  // оставаясь прижатыми к их нижнему краю (размер постоянный)
+  const goalGapWidth = GOAL_WIDTH / 2 - GOAL_POST_THICKNESS / 2;
+  const goalFillerY = goalY + GOAL_HEIGHT / 2 - GOAL_SIDE_FILLER_HEIGHT / 2;
+  Body.setPosition(arena.goalLeftSideFiller, { x: goalGapWidth / 2, y: goalFillerY });
+  Body.setPosition(arena.goalRightSideFiller, { x: width - goalGapWidth / 2, y: goalFillerY });
   updateBackWalls(arena, world, width, height, goalY);
 }
 
-// Перестраивает невидимые стены за воротами так, чтобы они
-// заполняли проём между низом ворот и землёй.
-export function updateBackWalls(arena: Arena, world: World, width: number, height: number, goalY: number): void {
+// Создаёт невидимые стенки за краем экрана в зоне ворот. Боковые стены
+// арены заканчиваются на уровне верха опущенных ворот, поэтому ниже —
+// вплоть до земли — край экрана «открыт». Эти стенки продолжают боковые
+// стены до земли, но целиком спрятаны за пределами канваса: игрок,
+// дойдя до кромки экрана, упирается в них и не может выйти за границы
+// арены, при этом стенок на экране не видно.
+function buildBackWalls(width: number, height: number, goalY: number): { goalLeftBackWall: Body; goalRightBackWall: Body } {
   const goalBottom = goalY + GOAL_HEIGHT / 2; // низ ворот
   const groundTop = height - GROUND_HEIGHT; // верх земли
-  const wallHeight = Math.max(groundTop - goalBottom, 1); // высота стены (минимум 1px)
-  const wallCenterY = (goalBottom + groundTop) / 2; // центр стены
+  // Верх опущенных ворот: именно с этой линии боковые стены заканчиваются,
+  // поэтому стенка не должна быть выше — выше уже стоит боковая стена.
+  const bottomGoalTop = height - GROUND_HEIGHT - GOAL_HEIGHT;
+  // Стенка тянется от верха земли до низа ворот (но не выше верха
+  // опущенных ворот). Высота не может быть отрицательной — минимум 1px.
+  const wallTop = Math.min(goalBottom, bottomGoalTop);
+  const wallHeight = Math.max(groundTop - wallTop, 1);
+  const wallCenterY = wallTop + wallHeight / 2; // центр стенки
 
-  // Удаляем старые стены из мира
+  // Стенка начинается ровно на кромке экрана (x = 0 и x = width) и уходит
+  // наружу, смыкаясь с боковой стеной без зазоров и наложений.
+  const wallWidth = BACK_WALL_THICKNESS + BACK_WALL_EDGE_OFFSET;
+
+  const goalLeftBackWall = Bodies.rectangle(-wallWidth / 2, wallCenterY, wallWidth, wallHeight, {
+    isStatic: true,
+    render: { fillStyle: COLORS.goal },
+    label: LABELS.backWall,
+  });
+  const goalRightBackWall = Bodies.rectangle(width + wallWidth / 2, wallCenterY, wallWidth, wallHeight, {
+    isStatic: true,
+    render: { fillStyle: COLORS.goal },
+    label: LABELS.backWall,
+  });
+
+  return { goalLeftBackWall, goalRightBackWall };
+}
+
+// Перестраивает невидимые стенки за краем экрана под текущее
+// положение ворот.
+// ВАЖНО: параметр height — это полная высота окна. Из неё внутри
+// buildBackWalls вычисляется позиция земли (height - GROUND_HEIGHT),
+// поэтому уменьшать его нельзя — иначе стенки схлопнутся до 1px
+// и у кромки экрана появится дыра, через которую игрок уйдёт за экран.
+export function updateBackWalls(arena: Arena, world: World, width: number, height: number, goalY: number): void {
+  // Удаляем старые стенки из мира
   World.remove(world, arena.goalLeftBackWall);
   World.remove(world, arena.goalRightBackWall);
 
-  // Создаём новые стены нужной высоты
-  arena.goalLeftBackWall = Bodies.rectangle(-BACK_WALL_EDGE_OFFSET, wallCenterY, BACK_WALL_THICKNESS, wallHeight, {
-    isStatic: true,
-    render: { visible: false },
-    label: LABELS.backWall,
-  });
-  arena.goalRightBackWall = Bodies.rectangle(width + BACK_WALL_EDGE_OFFSET, wallCenterY, BACK_WALL_THICKNESS, wallHeight, {
-    isStatic: true,
-    render: { visible: false },
-    label: LABELS.backWall,
-  });
-
-  // Добавляем новые стены в мир
+  // Создаём новые стенки нужной высоты и добавляем их в мир
+  const walls = buildBackWalls(width, height, goalY);
+  arena.goalLeftBackWall = walls.goalLeftBackWall;
+  arena.goalRightBackWall = walls.goalRightBackWall;
   World.add(world, [arena.goalLeftBackWall, arena.goalRightBackWall]);
 }

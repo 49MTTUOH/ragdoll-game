@@ -33,6 +33,9 @@ import {
   BALL_RESTITUTION,
   BALL_DENSITY,
   BALL_STROKE_WIDTH,
+  BALL_AUTO_BOUNCE_VELOCITY,
+  BALL_AUTO_BOUNCE_ZONE,
+  BALL_AUTO_BOUNCE_SPEED_THRESHOLD,
   PLAYER_1_COLOR,
   PLAYER_2_COLOR,
   PLAYER_1_X_RATIO,
@@ -80,7 +83,7 @@ export class RagdollGame {
   private ball!: Body; // мяч
 
   // --- Состояние матча ---
-  private score = { p1: 0, p2: 0 }; // счёт игроков
+  private score = { p1: 4, p2: 0 }; // счёт игроков
   private timeLeft = MATCH_DURATION; // оставшееся время матча
   private timerId: number | null = null; // id интервала таймера
   private phaseChangeTimeout: number | null = null; // id таймаута поднятия ворот
@@ -143,6 +146,8 @@ export class RagdollGame {
       this.arena.goalRightTopBar,
       this.arena.goalLeftSensor,
       this.arena.goalRightSensor,
+      this.arena.goalLeftSideFiller,
+      this.arena.goalRightSideFiller,
       this.arena.goalLeftBackWall,
       this.arena.goalRightBackWall,
     ]);
@@ -470,6 +475,14 @@ export class RagdollGame {
         if (p.velocity.x > MAX_PLAYER_SPEED) Body.setVelocity(p, { x: MAX_PLAYER_SPEED, y: p.velocity.y });
         if (p.velocity.x < -MAX_PLAYER_SPEED) Body.setVelocity(p, { x: -MAX_PLAYER_SPEED, y: p.velocity.y });
       });
+
+      // Автоподскок мяча: если мяч лежит или медленно катится по земле,
+      // сам придаём ему вертикальную скорость, чтобы он не переставал прыгать
+      const ballNearGround = this.ball.position.y > groundY - BALL_AUTO_BOUNCE_ZONE;
+      const ballVerticalSpeedSlow = Math.abs(this.ball.velocity.y) < BALL_AUTO_BOUNCE_SPEED_THRESHOLD;
+      if (ballNearGround && ballVerticalSpeedSlow) {
+        Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: BALL_AUTO_BOUNCE_VELOCITY });
+      }
     });
 
     // При изменении размера окна подстраиваем размер canvas
