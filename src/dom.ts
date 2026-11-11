@@ -10,6 +10,7 @@ export const canvas = document.getElementById("canvas") as HTMLCanvasElement; //
 export const p1ScoreEl = document.getElementById("p1-score") as HTMLElement; // счёт игрока 1
 export const p2ScoreEl = document.getElementById("p2-score") as HTMLElement; // счёт игрока 2
 export const timerEl = document.getElementById("timer") as HTMLElement; // таймер матча
+export const doubleJumpHintEl = document.getElementById("double-jump-hint") as HTMLElement; // индикатор двойного прыжка (фаза 3+)
 export const goalTextEl = document.getElementById("goal-text") as HTMLElement; // надпись «ГОЛ!»
 export const gameOverEl = document.getElementById("game-over") as HTMLElement; // экран окончания матча
 export const startScreenEl = document.getElementById("start-screen") as HTMLElement; // стартовый экран

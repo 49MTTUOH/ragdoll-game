@@ -8,6 +8,7 @@
 
 import { Bodies, Body, World } from "matter-js";
 import {
+  MAX_JUMPS_PHASE_3,
   PLAYER_HEAD_SIZE,
   PLAYER_BODY_WIDTH,
   PLAYER_BODY_HEIGHT,
@@ -30,10 +31,25 @@ import {
   PLAYER_DENSITY,
 } from "./config";
 
-// Игрок: составное физическое тело + цвет для отрисовки.
+// Игрок: составное физическое тело + цвет для отрисовки
+// + счётчик оставшихся прыжков (для двойного прыжка в фазе 3).
 export interface Player {
   body: Body;
   color: string;
+  jumpsLeft: number; // сколько прыжков ещё доступно (сбрасывается при касании земли)
+}
+
+// Сбрасывает счётчик прыжков игрока — вызывается при касании земли.
+export function resetJumps(player: Player): void {
+  player.jumpsLeft = MAX_JUMPS_PHASE_3;
+}
+
+// Пытается израсходовать один прыжок игрока (для прыжка в воздухе).
+// Возвращает true, если прыжки ещё остались, иначе false.
+export function tryConsumeJump(player: Player): boolean {
+  if (player.jumpsLeft <= 0) return false;
+  player.jumpsLeft--;
+  return true;
 }
 
 // Создаёт ragdoll-персонажа в точке (x, y) и добавляет его в мир.
@@ -73,5 +89,5 @@ export function createPlayer(world: World, x: number, y: number, color: string):
   });
 
   World.add(world, compound);
-  return { body: compound, color };
+  return { body: compound, color, jumpsLeft: MAX_JUMPS_PHASE_3 };
 }

@@ -14,6 +14,7 @@ import {
   GROUND_HEIGHT,
   GROUND_JUMP_ZONE,
   GOALS_TO_PHASE_2,
+  GOALS_TO_PHASE_3,
   MATCH_DURATION,
   GRAVITY,
   JUMP_VELOCITY,
@@ -27,6 +28,7 @@ import {
   STABILIZE_DAMPING,
   MAX_PLAYER_SPEED,
   BALL_RADIUS,
+  BALL_PHASE_4_RADIUS,
   BALL_START_Y_RATIO,
   BALL_FRICTION,
   BALL_FRICTION_AIR,
@@ -42,6 +44,8 @@ import {
   PLAYER_2_X_RATIO,
   PLAYER_SPAWN_OFFSET_Y,
   TIMER_INTERVAL_MS,
+  PHASE_4_TIME_LEFT,
+  PHASE_4_DURATION_S,
   GOAL_RESET_DELAY_MS,
   GOAL_SLOWMO_TIME_SCALE,
   GOAL_SLOWMO_RAMP_MS,
@@ -57,6 +61,7 @@ import {
   p1ScoreEl,
   p2ScoreEl,
   timerEl,
+  doubleJumpHintEl,
   goalTextEl,
   gameOverEl,
   startScreenEl,
@@ -66,7 +71,7 @@ import {
   winnerTextEl,
 } from "./dom";
 import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena } from "./arena";
-import { createPlayer, type Player } from "./player";
+import { createPlayer, resetJumps, tryConsumeJump, type Player } from "./player";
 import { burstConfetti, clearConfetti, setConfettiPaused } from "./confetti";
 
 export class RagdollGame {
@@ -83,7 +88,7 @@ export class RagdollGame {
   private ball!: Body; // мяч
 
   // --- Состояние матча ---
-  private score = { p1: 4, p2: 0 }; // счёт игроков
+  private score = { p1: 0, p2: 0 }; // счёт игроков
   private timeLeft = MATCH_DURATION; // оставшееся время матча
   private timerId: number | null = null; // id интервала таймера
   private phaseChangeTimeout: number | null = null; // id таймаута поднятия ворот
@@ -91,8 +96,11 @@ export class RagdollGame {
   private gameEnded = false; // завершён ли матч
   private paused = false; // стоит ли пауза
   private keys = new Set<string>(); // зажатые в данный момент клавиши
-  private goalsUp = false; // подняты ли ворота (фаза 2)
+  private phase = 1; // текущая фаза матча (1 — обычная, 2 — ворота сверху, 3 — ворота сверху + двойной прыжок, 4 — большой мяч на минуту)
   private jumpVelocity = JUMP_VELOCITY; // текущая скорость прыжка (меняется в фазе 2)
+  private phase4SecondsLeft = 0; // сколько секунд осталось до возврата мяча к обычному размеру (фаза 4)
+  private phase4Started = false; // начиналась ли уже фаза 4 в этом матче (чтобы не запускалась повторно)
+  private ballScale = 1; // текущий масштаб мяча относительно BALL_RADIUS (для корректного возврата размера)
   private jumpQueued = { p1: false, p2: false }; // запрошенные прыжки (срабатывают при касании земли)
   private goalLocked = false; // заблокирован ли счёт голов (пока идёт сброс раунда после гола)
   private goalResetTimeout: number | null = null; // id таймаута сброса раунда после гола
@@ -155,17 +163,60 @@ export class RagdollGame {
 
   // Поднимает ворота вверх (фаза 2) и усиливает прыжок.
   private setGoalsUp(): void {
-    this.goalsUp = true;
+    this.phase = 2;
     this.jumpVelocity = JUMP_VELOCITY_GOALS_UP;
     setGoalPositions(this.arena, this.world, window.innerWidth, window.innerHeight, getGoalYTop(window.innerHeight));
     this.showGoal(UI_TEXT.goalsUp);
   }
 
+  // Включает фазу 3: ворота остаются поднятыми (как в фазе 2),
+  // позиционирование ворот не меняется, но игроки получают двойной прыжок.
+  private setPhase3(): void {
+    this.phase = 3;
+    // Ворота остаются поднятыми (позиционирование из фазы 2 не меняется),
+    // усиленный прыжок и скорость прыжка сохраняются.
+    this.jumpVelocity = JUMP_VELOCITY_GOALS_UP;
+    this.showGoal(UI_TEXT.phase3);
+    // Постоянный индикатор: двойной прыжок теперь доступен (виден до конца матча)
+    doubleJumpHintEl.textContent = UI_TEXT.doubleJumpHint;
+    doubleJumpHintEl.classList.remove("hidden");
+  }
+
+  // Включает фазу 4: мяч становится больше на минуту.
+  // Ворота остаются сверху (как в фазах 2 и 3), двойной прыжок сохраняется.
+  private setPhase4(): void {
+    this.phase = 4;
+    this.phase4SecondsLeft = PHASE_4_DURATION_S;
+    this.enlargeBall();
+    this.showGoal(UI_TEXT.phase4);
+  }
+
+  // Завершает фазу 4: возвращает мячу обычный размер, фаза откатывается к 3
+  // (двойной прыжок и поднятые ворота сохраняются).
+  private endPhase4(): void {
+    if (this.ballScale !== 1) {
+      Body.scale(this.ball, 1 / this.ballScale, 1 / this.ballScale);
+      this.ballScale = 1;
+    }
+    this.phase = 3;
+    this.showGoal(UI_TEXT.phase4End);
+  }
+
+  // Увеличивает мяч до BALL_PHASE_4_RADIUS, сохраняя его позицию и скорость.
+  private enlargeBall(): void {
+    if (this.ballScale !== 1) return;
+    const k = BALL_PHASE_4_RADIUS / BALL_RADIUS;
+    this.ballScale = k;
+    Body.scale(this.ball, k, k);
+  }
+
   // Опускает ворота вниз (обычная фаза) и возвращает обычный прыжок.
   private setGoalsDown(): void {
-    this.goalsUp = false;
+    this.phase = 1;
     this.jumpVelocity = JUMP_VELOCITY;
     setGoalPositions(this.arena, this.world, window.innerWidth, window.innerHeight, getGoalYBottom(window.innerHeight));
+    // Скрываем индикатор двойного прыжка (полный рестарт матча)
+    doubleJumpHintEl.classList.add("hidden");
   }
 
   // Создаёт мяч в центре поля и добавляет его в мир.
@@ -281,16 +332,24 @@ export class RagdollGame {
     }, GOAL_TEXT_DURATION_MS);
   }
 
-  // Проверяет, пора ли поднимать ворота (фаза 2).
+  // Проверяет, не наступила ли новая фаза по счёту:
+  // фаза 2 — ворота поднимаются (при 2 голах у любого игрока),
+  // фаза 3 — включается двойной прыжок, ворота остаются сверху (при 4 голах).
   private checkPhaseChange(): void {
-    if (this.goalsUp) return;
-    if (this.score.p1 >= GOALS_TO_PHASE_2 || this.score.p2 >= GOALS_TO_PHASE_2) {
-      if (this.phaseChangeTimeout) clearTimeout(this.phaseChangeTimeout);
-      this.phaseChangeTimeout = window.setTimeout(() => {
-        this.phaseChangeTimeout = null;
-        if (!this.gameEnded && !this.goalsUp) this.setGoalsUp();
-      }, PHASE_CHANGE_DELAY_MS);
-    }
+    const targetPhase =
+      this.score.p1 >= GOALS_TO_PHASE_3 || this.score.p2 >= GOALS_TO_PHASE_3
+        ? 3
+        : this.score.p1 >= GOALS_TO_PHASE_2 || this.score.p2 >= GOALS_TO_PHASE_2
+          ? 2
+          : 1;
+    if (targetPhase <= this.phase) return;
+    if (this.phaseChangeTimeout) clearTimeout(this.phaseChangeTimeout);
+    this.phaseChangeTimeout = window.setTimeout(() => {
+      this.phaseChangeTimeout = null;
+      if (this.gameEnded || this.phase >= targetPhase) return;
+      if (targetPhase === 2) this.setGoalsUp();
+      else if (targetPhase === 3) this.setPhase3();
+    }, PHASE_CHANGE_DELAY_MS);
   }
 
   // Запускает обратный отсчёт времени матча.
@@ -302,6 +361,25 @@ export class RagdollGame {
       if (!this.running || this.gameEnded || this.paused) return;
       this.timeLeft--;
       timerEl.textContent = this.timeLeft.toString();
+
+      // Фаза 4: через 5 минут матча (когда осталось PHASE_4_TIME_LEFT секунд)
+      // мяч на минуту становится больше — один раз за матч.
+      if (
+        this.timeLeft > 0 &&
+        this.timeLeft <= PHASE_4_TIME_LEFT &&
+        !this.phase4Started
+      ) {
+        this.phase4Started = true;
+        this.setPhase4();
+      }
+
+      // Отсчёт длительности фазы 4: по истечении минуты мяч возвращается
+      // к обычному размеру (пауза и слоу-мо не съедают время — тик не срабатывает).
+      if (this.phase4SecondsLeft > 0) {
+        this.phase4SecondsLeft--;
+        if (this.phase4SecondsLeft === 0) this.endPhase4();
+      }
+
       if (this.timeLeft <= 0) this.endMatch();
     }, TIMER_INTERVAL_MS);
   }
@@ -452,8 +530,16 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player1.right)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: MOVE_FORCE, y: 0 });
         }
-        if (this.jumpQueued.p1 && isOnGround(this.player1)) {
-          Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+        if (this.jumpQueued.p1) {
+          if (isOnGround(this.player1)) {
+            // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
+            resetJumps(this.player1);
+            if (this.phase >= 3) tryConsumeJump(this.player1); // в фазе 3 земной прыжок расходует один из двух
+            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+          } else if (this.phase >= 3 && tryConsumeJump(this.player1)) {
+            // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
+            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+          }
         }
         this.jumpQueued.p1 = false;
 
@@ -464,8 +550,16 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player2.right)) {
           Body.applyForce(this.player2.body, this.player2.body.position, { x: MOVE_FORCE, y: 0 });
         }
-        if (this.jumpQueued.p2 && isOnGround(this.player2)) {
-          Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+        if (this.jumpQueued.p2) {
+          if (isOnGround(this.player2)) {
+            // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
+            resetJumps(this.player2);
+            if (this.phase >= 3) tryConsumeJump(this.player2); // в фазе 3 земной прыжок расходует один из двух
+            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+          } else if (this.phase >= 3 && tryConsumeJump(this.player2)) {
+            // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
+            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+          }
         }
         this.jumpQueued.p2 = false;
       }
@@ -532,6 +626,13 @@ export class RagdollGame {
       this.running = false;
       this.paused = false;
       this.goalLocked = false;
+      this.phase4SecondsLeft = 0; // сбрасываем таймер фазы 4
+      this.phase4Started = false; // фаза 4 снова сможет наступить в новом матче
+      if (this.ballScale !== 1) {
+        // возвращаем мячу обычный размер, если матч оборвался во время фазы 4
+        Body.scale(this.ball, 1 / this.ballScale, 1 / this.ballScale);
+        this.ballScale = 1;
+      }
       this.clearGoalCelebration(); // сбрасываем надпись «ГОЛ!» и конфетти
       setConfettiPaused(false);
       document.body.classList.remove("paused");
