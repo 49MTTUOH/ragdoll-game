@@ -9,7 +9,7 @@
 // на элементы интерфейса — в ./dom.ts.
 // ============================================================
 
-import { Engine, Render, World, Bodies, Body, Events, Runner } from "matter-js";
+import { Engine, Render, World, Bodies, Body, Events } from "matter-js";
 import {
   GROUND_HEIGHT,
   GROUND_JUMP_ZONE,
@@ -22,6 +22,7 @@ import {
   MOVE_FORCE,
   TOUCH_ARENA_SCALE,
   TOUCH_MOVEMENT_SCALE,
+  TOUCH_PHYSICS_TIME_SCALE,
   UPRIGHT_TORQUE,
   UPRIGHT_TORQUE_MULTIPLIER,
   UPRIGHT_ANGLE_THRESHOLD,
@@ -38,7 +39,7 @@ import {
   BALL_DENSITY,
   BALL_STROKE_WIDTH,
   BALL_AUTO_BOUNCE_VELOCITY,
-  BALL_AUTO_BOUNCE_ZONE,
+  BALL_AUTO_BOUNCE_GROUND_TOLERANCE,
   BALL_AUTO_BOUNCE_SPEED_THRESHOLD,
   PLAYER_1_COLOR,
   PLAYER_2_COLOR,
@@ -77,14 +78,21 @@ import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena 
 import { createPlayer, resetJumps, tryConsumeJump, type Player } from "./player";
 import { burstConfetti, clearConfetti, setConfettiPaused } from "./confetti";
 
+const PHYSICS_STEP_MS = 1000 / 60;
+const MAX_PHYSICS_FRAME_MS = 100;
+const PHYSICS_STEP_TOLERANCE_MS = 1e-6;
+
 export class RagdollGame {
   // --- Движок и отрисовка ---
   private engine: Engine;
   private render: Render;
   private world: World;
-  private runner!: Runner;
   private readonly arenaScale: number;
   private readonly movementScale: number;
+  private readonly normalTimeScale: number;
+  private physicsFrameId: number | null = null;
+  private lastPhysicsFrame: number | null = null;
+  private physicsTimeRemaining = 0;
 
   // --- Объекты мира ---
   private arena!: Arena; // статичные тела (земля, стены, ворота)
@@ -114,15 +122,17 @@ export class RagdollGame {
   private arenaSize: { w: number; h: number }; // текущие размеры арены (для пересборки при ресайзе)
   private resizeTimeout: number | null = null; // id таймаута дебаунса ресайза
 
-  constructor(touchDevice: boolean) {
+  constructor(private readonly touchDevice: boolean) {
     this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
     this.movementScale = touchDevice ? TOUCH_MOVEMENT_SCALE : 1;
+    this.normalTimeScale = touchDevice ? TOUCH_PHYSICS_TIME_SCALE : 1;
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.arenaSize = { w: width * this.arenaScale, h: height * this.arenaScale };
 
     // Создаём физический движок с гравитацией из конфигурации
     this.engine = Engine.create({ gravity: GRAVITY });
+    this.engine.timing.timeScale = this.normalTimeScale;
     this.world = this.engine.world;
 
     // Настраиваем отрисовку на canvas
@@ -149,8 +159,35 @@ export class RagdollGame {
 
     // Запускаем цикл отрисовки и физики
     Render.run(this.render);
-    this.runner = Runner.create();
-    Runner.run(this.runner, this.engine);
+    this.startPhysics();
+  }
+
+  // Физика отрабатывает одинаковое число шагов за секунду при разных FPS.
+  private updatePhysics = (now: number): void => {
+    if (this.lastPhysicsFrame !== null) {
+      this.physicsTimeRemaining += Math.min(now - this.lastPhysicsFrame, MAX_PHYSICS_FRAME_MS);
+      while (this.physicsTimeRemaining + PHYSICS_STEP_TOLERANCE_MS >= PHYSICS_STEP_MS) {
+        Engine.update(this.engine, PHYSICS_STEP_MS);
+        this.physicsTimeRemaining -= PHYSICS_STEP_MS;
+      }
+    }
+    this.lastPhysicsFrame = now;
+    this.physicsFrameId = requestAnimationFrame(this.updatePhysics);
+  };
+
+  private startPhysics(): void {
+    this.physicsFrameId = requestAnimationFrame(this.updatePhysics);
+  }
+
+  private stopPhysics(): void {
+    if (this.physicsFrameId !== null) cancelAnimationFrame(this.physicsFrameId);
+    this.physicsFrameId = null;
+    this.resetPhysicsClock();
+  }
+
+  private resetPhysicsClock(): void {
+    this.lastPhysicsFrame = null;
+    this.physicsTimeRemaining = 0;
   }
 
   // Создаёт статичные тела арены и добавляет их в мир.
@@ -323,6 +360,7 @@ export class RagdollGame {
   // Запускает slow-motion после гола: плавно снижает масштаб времени физики.
   // Замедление действует до сброса раунда (кулдаун перезапуска не меняется).
   private startGoalSlowmo(): void {
+    if (this.touchDevice) return;
     this.stopGoalSlowmo();
     const startTime = performance.now();
     const fromScale = this.engine.timing.timeScale;
@@ -334,10 +372,10 @@ export class RagdollGame {
     this.slowmoRafId = requestAnimationFrame(step);
   }
 
-  // Возвращает масштаб времени к нормальному (1) и отменяет анимацию замедления.
+  // Возвращает обычный темп физики и отменяет анимацию замедления.
   private resetTimeScale(): void {
     this.stopGoalSlowmo();
-    this.engine.timing.timeScale = 1;
+    this.engine.timing.timeScale = this.normalTimeScale;
   }
 
   // Отменяет активную анимацию входа в слоу-мо (если идёт).
@@ -478,12 +516,12 @@ export class RagdollGame {
     this.paused = !this.paused;
     if (this.paused) {
       this.jumpQueued = { p1: false, p2: false };
-      Runner.stop(this.runner);
+      this.stopPhysics();
       setConfettiPaused(true); // замораживаем частицы конфетти
       document.body.classList.add("paused"); // замирает CSS-анимация надписи
       pauseScreenEl.classList.remove("hidden");
     } else {
-      Runner.start(this.runner, this.engine);
+      this.startPhysics();
       setConfettiPaused(false);
       document.body.classList.remove("paused");
       pauseScreenEl.classList.add("hidden");
@@ -651,12 +689,15 @@ export class RagdollGame {
 
       // Автоподскок мяча: если мяч лежит или медленно катится по земле,
       // сам придаём ему вертикальную скорость, чтобы он не переставал прыгать
-      const ballNearGround = this.ball.position.y > groundY - BALL_AUTO_BOUNCE_ZONE;
+      const ballBottom = this.ball.position.y + BALL_RADIUS * this.ballScale;
+      const ballNearGround = ballBottom >= groundY - BALL_AUTO_BOUNCE_GROUND_TOLERANCE;
       const ballVerticalSpeedSlow = Math.abs(this.ball.velocity.y) < BALL_AUTO_BOUNCE_SPEED_THRESHOLD;
       if (ballNearGround && ballVerticalSpeedSlow) {
         Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: BALL_AUTO_BOUNCE_VELOCITY });
       }
     });
+
+    document.addEventListener("visibilitychange", () => this.resetPhysicsClock());
 
     // При изменении размера окна (в том числе повороте телефона):
     // дебаунсим, затем обновляем канвас и при необходимости пересобираем арену

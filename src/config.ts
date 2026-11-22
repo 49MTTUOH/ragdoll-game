@@ -40,7 +40,7 @@ export const BALL_RESTITUTION = 1.0; // упругость (1.0 = отскаки
 export const BALL_DENSITY = 0.0008; // плотность (влияет на массу)
 export const BALL_STROKE_WIDTH = 3; // толщина обводки мяча
 export const BALL_AUTO_BOUNCE_VELOCITY = -15; // скорость подскока мяча, когда он перестал прыгать (отрицательная = вверх)
-export const BALL_AUTO_BOUNCE_ZONE = 60; // зона у земли, в которой мяч подскакивает сам
+export const BALL_AUTO_BOUNCE_GROUND_TOLERANCE = 2; // допустимый зазор между мячом и полом для автоподскока
 export const BALL_AUTO_BOUNCE_SPEED_THRESHOLD = 2; // вертикальная скорость, ниже которой мяч считается «лежащим» на земле
 
 // ---------- ИГРОКИ ----------
@@ -81,6 +81,7 @@ export const PLAYER_DENSITY = 0.0025; // плотность персонажа
 // ---------- ФИЗИКА ----------
 // Настройки физического движка Matter.js: гравитация,
 // прыжки, движение и стабилизация персонажей.
+export const TOUCH_PHYSICS_TIME_SCALE = 0.75; // темп физики на тач-экранах
 export const GRAVITY = { x: 0, y: 1.2 }; // гравитация (y > 0 = притяжение вниз)
 export const JUMP_VELOCITY = -18; // скорость прыжка (отрицательная = вверх)
 export const JUMP_VELOCITY_GOALS_UP = -21; // скорость прыжка, когда ворота подняты (фаза 2 и 3) — чуть слабее обычного усиления
