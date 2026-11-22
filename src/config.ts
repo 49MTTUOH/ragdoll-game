@@ -81,7 +81,7 @@ export const PLAYER_DENSITY = 0.0025; // плотность персонажа
 // ---------- ФИЗИКА ----------
 // Настройки физического движка Matter.js: гравитация,
 // прыжки, движение и стабилизация персонажей.
-export const TOUCH_PHYSICS_TIME_SCALE = 0.75; // темп физики на тач-экранах
+export const TOUCH_PHYSICS_TIME_SCALE = 0.8; // темп физики на тач-экранах
 export const GRAVITY = { x: 0, y: 1.2 }; // гравитация (y > 0 = притяжение вниз)
 export const JUMP_VELOCITY = -18; // скорость прыжка (отрицательная = вверх)
 export const JUMP_VELOCITY_GOALS_UP = -21; // скорость прыжка, когда ворота подняты (фаза 2 и 3) — чуть слабее обычного усиления
