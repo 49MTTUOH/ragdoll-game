@@ -21,7 +21,7 @@ import {
   JUMP_VELOCITY_GOALS_UP,
   MOVE_FORCE,
   TOUCH_ARENA_SCALE,
-  TOUCH_JUMP_SCALE,
+  TOUCH_PLAYER_JUMP_SCALE,
   TOUCH_MOVEMENT_SCALE,
   TOUCH_PHYSICS_TIME_SCALE,
   UPRIGHT_TORQUE,
@@ -40,6 +40,7 @@ import {
   BALL_DENSITY,
   BALL_STROKE_WIDTH,
   BALL_AUTO_BOUNCE_VELOCITY,
+  TOUCH_BALL_BOUNCE_SCALE,
   BALL_AUTO_BOUNCE_GROUND_TOLERANCE,
   BALL_AUTO_BOUNCE_SPEED_THRESHOLD,
   PLAYER_1_COLOR,
@@ -89,7 +90,8 @@ export class RagdollGame {
   private render: Render;
   private world: World;
   private readonly arenaScale: number;
-  private readonly jumpScale: number;
+  private readonly playerJumpScale: number;
+  private readonly ballBounceVelocity: number;
   private readonly movementScale: number;
   private readonly normalTimeScale: number;
   private physicsFrameId: number | null = null;
@@ -126,7 +128,8 @@ export class RagdollGame {
 
   constructor(private readonly touchDevice: boolean) {
     this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
-    this.jumpScale = this.arenaScale * (touchDevice ? TOUCH_JUMP_SCALE : 1);
+    this.playerJumpScale = this.arenaScale * (touchDevice ? TOUCH_PLAYER_JUMP_SCALE : 1);
+    this.ballBounceVelocity = BALL_AUTO_BOUNCE_VELOCITY * this.arenaScale * (touchDevice ? TOUCH_BALL_BOUNCE_SCALE : 1);
     this.movementScale = this.arenaScale * (touchDevice ? TOUCH_MOVEMENT_SCALE : 1);
     this.normalTimeScale = touchDevice ? TOUCH_PHYSICS_TIME_SCALE : 1;
     const width = window.innerWidth;
@@ -643,7 +646,7 @@ export class RagdollGame {
       // --- Управление игроками (полностью отключено в состоянии «гол») ---
       if (!this.goalLocked) {
         const moveForce = MOVE_FORCE * this.movementScale;
-        const jumpVelocity = this.jumpVelocity * this.jumpScale;
+        const jumpVelocity = this.jumpVelocity * this.playerJumpScale;
         // --- Управление Игроком 1 (A / D / W) ---
         if (this.keys.has(KEYS.player1.left)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: -moveForce, y: 0 });
@@ -699,7 +702,7 @@ export class RagdollGame {
       const ballNearGround = ballBottom >= groundY - BALL_AUTO_BOUNCE_GROUND_TOLERANCE;
       const ballVerticalSpeedSlow = Math.abs(this.ball.velocity.y) < BALL_AUTO_BOUNCE_SPEED_THRESHOLD * this.arenaScale;
       if (ballNearGround && ballVerticalSpeedSlow) {
-        Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: BALL_AUTO_BOUNCE_VELOCITY * this.jumpScale });
+        Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: this.ballBounceVelocity });
       }
     });
 
