@@ -9,9 +9,10 @@
 
 import "./style.css";
 import { RagdollGame } from "./game";
-import { setupMobile } from "./mobile";
+import { isTouchDevice, setupMobile } from "./mobile";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const game = new RagdollGame();
-  setupMobile(game);
+  const touchDevice = isTouchDevice();
+  const game = new RagdollGame(touchDevice);
+  if (touchDevice) setupMobile(game);
 });

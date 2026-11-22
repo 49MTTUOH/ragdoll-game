@@ -20,6 +20,8 @@ import {
   JUMP_VELOCITY,
   JUMP_VELOCITY_GOALS_UP,
   MOVE_FORCE,
+  TOUCH_ARENA_SCALE,
+  TOUCH_MOVEMENT_SCALE,
   UPRIGHT_TORQUE,
   UPRIGHT_TORQUE_MULTIPLIER,
   UPRIGHT_ANGLE_THRESHOLD,
@@ -81,6 +83,8 @@ export class RagdollGame {
   private render: Render;
   private world: World;
   private runner!: Runner;
+  private readonly arenaScale: number;
+  private readonly movementScale: number;
 
   // --- Объекты мира ---
   private arena!: Arena; // статичные тела (земля, стены, ворота)
@@ -107,10 +111,16 @@ export class RagdollGame {
   private goalResetTimeout: number | null = null; // id таймаута сброса раунда после гола
   private goalTextTimeout: number | null = null; // id таймаута скрытия надписи «ГОЛ!»
   private slowmoRafId: number | null = null; // id анимации плавного входа в слоу-мо
-  private arenaSize = { w: 0, h: 0 }; // текущие размеры арены (для пересборки при ресайзе)
+  private arenaSize: { w: number; h: number }; // текущие размеры арены (для пересборки при ресайзе)
   private resizeTimeout: number | null = null; // id таймаута дебаунса ресайза
 
-  constructor() {
+  constructor(touchDevice: boolean) {
+    this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
+    this.movementScale = touchDevice ? TOUCH_MOVEMENT_SCALE : 1;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    this.arenaSize = { w: width * this.arenaScale, h: height * this.arenaScale };
+
     // Создаём физический движок с гравитацией из конфигурации
     this.engine = Engine.create({ gravity: GRAVITY });
     this.world = this.engine.world;
@@ -119,9 +129,11 @@ export class RagdollGame {
     this.render = Render.create({
       canvas: canvas,
       engine: this.engine,
+      bounds: { min: { x: 0, y: 0 }, max: { x: this.arenaSize.w, y: this.arenaSize.h } },
       options: {
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width,
+        height,
+        hasBounds: touchDevice,
         wireframes: false,
         background: COLORS.background,
         pixelRatio: window.devicePixelRatio || 1,
@@ -143,10 +155,7 @@ export class RagdollGame {
 
   // Создаёт статичные тела арены и добавляет их в мир.
   private setupArena(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    this.arena = createArena(width, height);
-    this.arenaSize = { w: width, h: height };
+    this.arena = createArena(this.arenaSize.w, this.arenaSize.h);
     World.add(this.world, this.arenaBodies());
   }
 
@@ -175,14 +184,13 @@ export class RagdollGame {
   // обновляет канвас с учётом devicePixelRatio, а если размеры реально
   // изменились — пересобирает арену под них.
   private handleResize(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    this.render.options.width = width;
-    this.render.options.height = height;
+    this.render.options.width = window.innerWidth;
+    this.render.options.height = window.innerHeight;
+    const width = window.innerWidth * this.arenaScale;
+    const height = window.innerHeight * this.arenaScale;
     this.render.bounds.max.x = width;
     this.render.bounds.max.y = height;
-    Render.setPixelRatio(this.render, this.render.options.pixelRatio ?? 1);
+    Render.setPixelRatio(this.render, window.devicePixelRatio || 1);
 
     if (width === this.arenaSize.w && height === this.arenaSize.h) return;
     this.rebuildArena(width, height);
@@ -193,15 +201,14 @@ export class RagdollGame {
   // при этом сохраняются.
   private rebuildArena(width: number, height: number): void {
     World.remove(this.world, this.arenaBodies());
-    this.arena = createArena(width, height);
-    World.add(this.world, this.arenaBodies());
+    this.arenaSize = { w: width, h: height };
+    this.setupArena();
 
     // Если ворота уже подняты (фаза 2+) — сразу ставим их верхнее положение
     if (this.phase >= 2) {
       setGoalPositions(this.arena, this.world, width, height, getGoalYTop(height));
     }
 
-    this.arenaSize = { w: width, h: height };
     this.jumpQueued = { p1: false, p2: false };
     this.resetBall();
     this.spawnPlayers();
@@ -211,7 +218,8 @@ export class RagdollGame {
   private setGoalsUp(): void {
     this.phase = 2;
     this.jumpVelocity = JUMP_VELOCITY_GOALS_UP;
-    setGoalPositions(this.arena, this.world, window.innerWidth, window.innerHeight, getGoalYTop(window.innerHeight));
+    const { w, h } = this.arenaSize;
+    setGoalPositions(this.arena, this.world, w, h, getGoalYTop(h));
     this.showGoal(UI_TEXT.goalsUp);
   }
 
@@ -260,15 +268,15 @@ export class RagdollGame {
   private setGoalsDown(): void {
     this.phase = 1;
     this.jumpVelocity = JUMP_VELOCITY;
-    setGoalPositions(this.arena, this.world, window.innerWidth, window.innerHeight, getGoalYBottom(window.innerHeight));
+    const { w, h } = this.arenaSize;
+    setGoalPositions(this.arena, this.world, w, h, getGoalYBottom(h));
     // Скрываем индикатор двойного прыжка (полный рестарт матча)
     doubleJumpHintEl.classList.add("hidden");
   }
 
   // Создаёт мяч в центре поля и добавляет его в мир.
   private setupBall(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const { w: width, h: height } = this.arenaSize;
     this.ball = Bodies.circle(width / 2, height * BALL_START_Y_RATIO, BALL_RADIUS, {
       label: LABELS.ball,
       friction: BALL_FRICTION,
@@ -282,8 +290,7 @@ export class RagdollGame {
 
   // Создаёт обоих игроков на их стартовых позициях.
   private spawnPlayers(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const { w: width, h: height } = this.arenaSize;
     const groundY = height - GROUND_HEIGHT;
 
     // Удаляем старых игроков, если они есть (при перезапуске раунда)
@@ -296,8 +303,7 @@ export class RagdollGame {
 
   // Возвращает мяч в центр поля и обнуляет его скорость.
   private resetBall(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const { w: width, h: height } = this.arenaSize;
     Body.setPosition(this.ball, { x: width / 2, y: height * BALL_START_Y_RATIO });
     Body.setVelocity(this.ball, { x: 0, y: 0 });
     Body.setAngularVelocity(this.ball, 0);
@@ -528,7 +534,8 @@ export class RagdollGame {
           this.score.p1++;
           p1ScoreEl.textContent = this.score.p1.toString();
           this.showGoal(UI_TEXT.goalP1, PLAYER_1_COLOR); // красочное празднование в цвете Игрока 1
-          burstConfetti("right"); // хлопушки из правых ворот, куда забит мяч
+          const { x, y } = this.arena.goalRightSensor.position;
+          burstConfetti("right", x / this.arenaScale, y / this.arenaScale);
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -548,7 +555,8 @@ export class RagdollGame {
           this.score.p2++;
           p2ScoreEl.textContent = this.score.p2.toString();
           this.showGoal(UI_TEXT.goalP2, PLAYER_2_COLOR); // красочное празднование в цвете Игрока 2
-          burstConfetti("left"); // хлопушки из левых ворот, куда забит мяч
+          const { x, y } = this.arena.goalLeftSensor.position;
+          burstConfetti("left", x / this.arenaScale, y / this.arenaScale);
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -564,8 +572,7 @@ export class RagdollGame {
     Events.on(this.engine, "beforeUpdate", () => {
       if (!this.running || this.gameEnded || this.paused) return;
 
-      const height = window.innerHeight;
-      const groundY = height - GROUND_HEIGHT;
+      const groundY = this.arenaSize.h - GROUND_HEIGHT;
 
       // Игрок считается на земле, если он в зоне GROUND_JUMP_ZONE над землёй
       const isOnGround = (player: Player) => {
@@ -592,12 +599,13 @@ export class RagdollGame {
 
       // --- Управление игроками (полностью отключено в состоянии «гол») ---
       if (!this.goalLocked) {
+        const moveForce = MOVE_FORCE * this.movementScale;
         // --- Управление Игроком 1 (A / D / W) ---
         if (this.keys.has(KEYS.player1.left)) {
-          Body.applyForce(this.player1.body, this.player1.body.position, { x: -MOVE_FORCE, y: 0 });
+          Body.applyForce(this.player1.body, this.player1.body.position, { x: -moveForce, y: 0 });
         }
         if (this.keys.has(KEYS.player1.right)) {
-          Body.applyForce(this.player1.body, this.player1.body.position, { x: MOVE_FORCE, y: 0 });
+          Body.applyForce(this.player1.body, this.player1.body.position, { x: moveForce, y: 0 });
         }
         if (this.jumpQueued.p1) {
           if (isOnGround(this.player1)) {
@@ -614,10 +622,10 @@ export class RagdollGame {
 
         // --- Управление Игроком 2 (← / → / ↑) ---
         if (this.keys.has(KEYS.player2.left)) {
-          Body.applyForce(this.player2.body, this.player2.body.position, { x: -MOVE_FORCE, y: 0 });
+          Body.applyForce(this.player2.body, this.player2.body.position, { x: -moveForce, y: 0 });
         }
         if (this.keys.has(KEYS.player2.right)) {
-          Body.applyForce(this.player2.body, this.player2.body.position, { x: MOVE_FORCE, y: 0 });
+          Body.applyForce(this.player2.body, this.player2.body.position, { x: moveForce, y: 0 });
         }
         if (this.jumpQueued.p2) {
           if (isOnGround(this.player2)) {
@@ -634,9 +642,11 @@ export class RagdollGame {
       }
 
       // Ограничиваем максимальную скорость игроков
+      const maxSpeed = MAX_PLAYER_SPEED * this.movementScale;
       [this.player1.body, this.player2.body].forEach((p) => {
-        if (p.velocity.x > MAX_PLAYER_SPEED) Body.setVelocity(p, { x: MAX_PLAYER_SPEED, y: p.velocity.y });
-        if (p.velocity.x < -MAX_PLAYER_SPEED) Body.setVelocity(p, { x: -MAX_PLAYER_SPEED, y: p.velocity.y });
+        if (Math.abs(p.velocity.x) > maxSpeed) {
+          Body.setVelocity(p, { x: Math.sign(p.velocity.x) * maxSpeed, y: p.velocity.y });
+        }
       });
 
       // Автоподскок мяча: если мяч лежит или медленно катится по земле,

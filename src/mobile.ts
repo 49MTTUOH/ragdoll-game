@@ -29,9 +29,10 @@ export interface MobileGameApi {
 }
 
 // --- Настройки джойстика ---
-const BASE_DIAMETER = 130; // диаметр основания (px)
-const KNOB_DIAMETER = 56; // диаметр ручки (px)
-const TRAVEL_RADIUS = 42; // максимальное отклонение ручки от центра (px)
+const BASE_DIAMETER = 88; // диаметр основания (px)
+const KNOB_DIAMETER = 38; // диаметр ручки (px)
+const KNOB_TRAVEL_RADIUS = (BASE_DIAMETER - KNOB_DIAMETER) / 2;
+const INPUT_RADIUS = 42; // расстояние от точки касания до полного отклонения (px)
 const DEADZONE = 0.3; // мёртвая зона: внутри неё игрок стоит на месте
 const JUMP_UP_THRESHOLD = 0.45; // отклонение вверх, при котором срабатывает прыжок
 const JUMP_RESET_THRESHOLD = 0.25; // палец опустился ниже — можно прыгать снова
@@ -62,7 +63,6 @@ export function isTouchDevice(): boolean {
 // Настраивает мобильное управление. Вызывается один раз из main.ts.
 export function setupMobile(game: MobileGameApi): void {
   api = game;
-  if (!isTouchDevice()) return; // десктоп: только клавиатура
 
   document.body.classList.add("touch-device");
 
@@ -148,16 +148,15 @@ function spawnStick(pointerId: number, player: 1 | 2, x: number, y: number): voi
 function updateStick(stick: Stick, x: number, y: number): void {
   const dx = x - stick.originX;
   const dy = y - stick.originY;
-  const distance = Math.hypot(dx, dy) || 1;
-  const travel = Math.min(distance, TRAVEL_RADIUS);
+  const distance = Math.max(Math.hypot(dx, dy), INPUT_RADIUS);
 
   // Нормализованное отклонение ручки: -1..1 по каждой оси
-  const nx = ((dx / distance) * travel) / TRAVEL_RADIUS;
-  const ny = ((dy / distance) * travel) / TRAVEL_RADIUS;
+  const nx = dx / distance;
+  const ny = dy / distance;
 
-  // Ручка следует за пальцем (но не дальше TRAVEL_RADIUS)
-  const knobX = stick.originX + (dx / distance) * travel;
-  const knobY = stick.originY + (dy / distance) * travel;
+  // Ручка показывает отклонение в пределах основания.
+  const knobX = stick.originX + nx * KNOB_TRAVEL_RADIUS;
+  const knobY = stick.originY + ny * KNOB_TRAVEL_RADIUS;
   stick.knob.style.left = knobX + "px";
   stick.knob.style.top = knobY + "px";
 
