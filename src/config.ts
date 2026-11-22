@@ -77,13 +77,17 @@ export const PLAYER_LEGS_DENSITY = 0.004; // плотность ног
 // Физика составного тела (всего персонажа целиком)
 export const PLAYER_FRICTION = 0.5; // трение персонажа
 export const PLAYER_RESTITUTION = 0.75; // упругость персонажа
+export const TOUCH_PLAYER_RESTITUTION = 0.1; // упругость персонажа на тач-экранах
 export const PLAYER_DENSITY = 0.0025; // плотность персонажа
 
 // ---------- ФИЗИКА ----------
 // Настройки физического движка Matter.js: гравитация,
 // прыжки, движение и стабилизация персонажей.
 export const TOUCH_PHYSICS_TIME_SCALE = 0.9; // темп физики на тач-экранах
-export const TOUCH_PLAYER_JUMP_SCALE = 0.82; // множитель скорости прыжка игроков на тач-экранах
+export const TOUCH_PLAYER_JUMP_SCALE = 0.53; // множитель скорости обычного прыжка на тач-экранах
+export const TOUCH_PLAYER_HIGH_JUMP_SCALE = 0.82; // множитель скорости прыжка при поднятых воротах
+export const TOUCH_PLAYER_CEILING_CLEARANCE = 16; // запас до потолка при прыжке (CSS-пиксели)
+export const TOUCH_PLAYER_MAX_FALL_SPEED = 11; // предельная скорость падения (CSS-пиксели за шаг)
 export const GRAVITY = { x: 0, y: 1.2 }; // гравитация (y > 0 = притяжение вниз)
 export const JUMP_VELOCITY = -18; // скорость прыжка (отрицательная = вверх)
 export const JUMP_VELOCITY_GOALS_UP = -21; // скорость прыжка, когда ворота подняты (фаза 2 и 3) — чуть слабее обычного усиления
@@ -96,7 +100,7 @@ export const STABILIZE_ANGLE_THRESHOLD = 0.3; // порог угла для га
 export const STABILIZE_ANGULAR_VELOCITY = 0.05; // порог угловой скорости для гашения
 export const STABILIZE_DAMPING = 0.7; // коэффициент гашения вращения (0.7 = гасим 30% за кадр)
 export const MAX_PLAYER_SPEED = 8; // максимальная скорость игрока (ограничение)
-export const TOUCH_MOVEMENT_SCALE = 0.92; // множитель силы движения и предельной скорости на тач-экранах
+export const TOUCH_MOVEMENT_SCALE = 0.74; // множитель силы движения и предельной скорости на тач-экранах
 
 // ---------- ИГРОВЫЕ ЗОНЫ И ФАЗЫ ----------
 // Правила матча: зона прыжка, переходы между фазами, длительность.

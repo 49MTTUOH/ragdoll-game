@@ -9,7 +9,7 @@
 // на элементы интерфейса — в ./dom.ts.
 // ============================================================
 
-import { Engine, Render, World, Bodies, Body, Events } from "matter-js";
+import { Engine, Render, World, Bodies, Body, Events, type Pair } from "matter-js";
 import {
   GROUND_HEIGHT,
   GROUND_JUMP_ZONE,
@@ -22,6 +22,10 @@ import {
   MOVE_FORCE,
   TOUCH_ARENA_SCALE,
   TOUCH_PLAYER_JUMP_SCALE,
+  TOUCH_PLAYER_HIGH_JUMP_SCALE,
+  TOUCH_PLAYER_CEILING_CLEARANCE,
+  TOUCH_PLAYER_MAX_FALL_SPEED,
+  TOUCH_PLAYER_RESTITUTION,
   TOUCH_MOVEMENT_SCALE,
   TOUCH_PHYSICS_TIME_SCALE,
   UPRIGHT_TORQUE,
@@ -90,7 +94,6 @@ export class RagdollGame {
   private render: Render;
   private world: World;
   private readonly arenaScale: number;
-  private readonly playerJumpScale: number;
   private readonly ballBounceVelocity: number;
   private readonly movementScale: number;
   private readonly normalTimeScale: number;
@@ -128,7 +131,6 @@ export class RagdollGame {
 
   constructor(private readonly touchDevice: boolean) {
     this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
-    this.playerJumpScale = this.arenaScale * (touchDevice ? TOUCH_PLAYER_JUMP_SCALE : 1);
     this.ballBounceVelocity = BALL_AUTO_BOUNCE_VELOCITY * this.arenaScale * (touchDevice ? TOUCH_BALL_BOUNCE_SCALE : 1);
     this.movementScale = this.arenaScale * (touchDevice ? TOUCH_MOVEMENT_SCALE : 1);
     this.normalTimeScale = touchDevice ? TOUCH_PHYSICS_TIME_SCALE : 1;
@@ -342,8 +344,53 @@ export class RagdollGame {
     if (this.player1) World.remove(this.world, this.player1.body);
     if (this.player2) World.remove(this.world, this.player2.body);
 
-    this.player1 = createPlayer(this.world, width * PLAYER_1_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_1_COLOR);
-    this.player2 = createPlayer(this.world, width * PLAYER_2_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_2_COLOR);
+    const restitution = this.touchDevice ? TOUCH_PLAYER_RESTITUTION : undefined;
+    this.player1 = createPlayer(this.world, width * PLAYER_1_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_1_COLOR, restitution);
+    this.player2 = createPlayer(this.world, width * PLAYER_2_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_2_COLOR, restitution);
+  }
+
+  private isPlayerOnGround(player: Player): boolean {
+    if (!this.touchDevice) {
+      return player.body.position.y > this.arenaSize.h - GROUND_HEIGHT - GROUND_JUMP_ZONE;
+    }
+
+    const ground = this.arena.ground;
+    return (this.engine.pairs.list as Pair[]).some(({ isActive, collision: { parentA, parentB } }) =>
+      isActive && ((parentA === ground && parentB === player.body) || (parentB === ground && parentA === player.body))
+    );
+  }
+
+  private jumpPlayer(player: Player): void {
+    const onGround = this.isPlayerOnGround(player);
+    if (!onGround && this.phase < 3) return;
+
+    const body = player.body;
+    let speed = this.jumpVelocity;
+    if (this.touchDevice) {
+      const scale = this.phase === 1 ? TOUCH_PLAYER_JUMP_SCALE : TOUCH_PLAYER_HIGH_JUMP_SCALE;
+      // Учитываем всю фигуру, в том числе если она повернётся в полёте.
+      const radius = Math.max(...body.vertices.map((vertex) =>
+        Math.hypot(vertex.x - body.position.x, vertex.y - body.position.y)
+      ));
+      const clearance = body.position.y - radius - TOUCH_PLAYER_CEILING_CLEARANCE * this.arenaScale;
+      if (clearance <= 0) return;
+      const gravityPerStep = this.engine.gravity.y * this.engine.gravity.scale * PHYSICS_STEP_MS ** 2;
+      speed = Math.max(speed * this.arenaScale * scale, -Math.sqrt(2 * gravityPerStep * clearance));
+    }
+
+    if (onGround) resetJumps(player);
+    if (this.phase >= 3 && !tryConsumeJump(player)) return;
+    Body.setVelocity(body, { x: body.velocity.x, y: speed });
+  }
+
+  private limitPlayerSpeed(body: Body): void {
+    const maxHorizontal = MAX_PLAYER_SPEED * this.movementScale;
+    const maxFall = this.touchDevice ? TOUCH_PLAYER_MAX_FALL_SPEED * this.arenaScale : Infinity;
+    const maxRise = this.touchDevice ? -JUMP_VELOCITY_GOALS_UP * this.arenaScale * TOUCH_PLAYER_HIGH_JUMP_SCALE : Infinity;
+    const { x, y } = body.velocity;
+    const cappedX = Math.max(-maxHorizontal, Math.min(maxHorizontal, x));
+    const cappedY = Math.max(-maxRise, Math.min(maxFall, y));
+    if (x !== cappedX || y !== cappedY) Body.setVelocity(body, { x: cappedX, y: cappedY });
   }
 
   // Возвращает мяч в центр поля и обнуляет его скорость.
@@ -620,11 +667,6 @@ export class RagdollGame {
 
       const groundY = this.arenaSize.h - GROUND_HEIGHT;
 
-      // Игрок считается на земле, если он в зоне GROUND_JUMP_ZONE над землёй
-      const isOnGround = (player: Player) => {
-        return player.body.position.y > groundY - GROUND_JUMP_ZONE;
-      };
-
       // Выпрямляем упавших игроков и гасим лишнее вращение
       [this.player1.body, this.player2.body].forEach((p) => {
         if (!p) return;
@@ -646,7 +688,6 @@ export class RagdollGame {
       // --- Управление игроками (полностью отключено в состоянии «гол») ---
       if (!this.goalLocked) {
         const moveForce = MOVE_FORCE * this.movementScale;
-        const jumpVelocity = this.jumpVelocity * this.playerJumpScale;
         // --- Управление Игроком 1 (A / D / W) ---
         if (this.keys.has(KEYS.player1.left)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: -moveForce, y: 0 });
@@ -654,17 +695,7 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player1.right)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: moveForce, y: 0 });
         }
-        if (this.jumpQueued.p1) {
-          if (isOnGround(this.player1)) {
-            // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
-            resetJumps(this.player1);
-            if (this.phase >= 3) tryConsumeJump(this.player1); // в фазе 3 земной прыжок расходует один из двух
-            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: jumpVelocity });
-          } else if (this.phase >= 3 && tryConsumeJump(this.player1)) {
-            // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
-            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: jumpVelocity });
-          }
-        }
+        if (this.jumpQueued.p1) this.jumpPlayer(this.player1);
         this.jumpQueued.p1 = false;
 
         // --- Управление Игроком 2 (← / → / ↑) ---
@@ -674,27 +705,9 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player2.right)) {
           Body.applyForce(this.player2.body, this.player2.body.position, { x: moveForce, y: 0 });
         }
-        if (this.jumpQueued.p2) {
-          if (isOnGround(this.player2)) {
-            // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
-            resetJumps(this.player2);
-            if (this.phase >= 3) tryConsumeJump(this.player2); // в фазе 3 земной прыжок расходует один из двух
-            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: jumpVelocity });
-          } else if (this.phase >= 3 && tryConsumeJump(this.player2)) {
-            // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
-            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: jumpVelocity });
-          }
-        }
+        if (this.jumpQueued.p2) this.jumpPlayer(this.player2);
         this.jumpQueued.p2 = false;
       }
-
-      // Ограничиваем максимальную скорость игроков
-      const maxSpeed = MAX_PLAYER_SPEED * this.movementScale;
-      [this.player1.body, this.player2.body].forEach((p) => {
-        if (Math.abs(p.velocity.x) > maxSpeed) {
-          Body.setVelocity(p, { x: Math.sign(p.velocity.x) * maxSpeed, y: p.velocity.y });
-        }
-      });
 
       // Автоподскок мяча: если мяч лежит или медленно катится по земле,
       // сам придаём ему вертикальную скорость, чтобы он не переставал прыгать
@@ -704,6 +717,13 @@ export class RagdollGame {
       if (ballNearGround && ballVerticalSpeedSlow) {
         Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: this.ballBounceVelocity });
       }
+    });
+
+    // На тач-экранах ограничиваем и импульсы, полученные при столкновениях.
+    Events.on(this.engine, this.touchDevice ? "afterUpdate" : "beforeUpdate", () => {
+      if (!this.running || this.gameEnded || this.paused) return;
+      this.limitPlayerSpeed(this.player1.body);
+      this.limitPlayerSpeed(this.player2.body);
     });
 
     document.addEventListener("visibilitychange", () => this.resetPhysicsClock());
