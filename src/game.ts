@@ -68,6 +68,7 @@ import {
   startBtn,
   restartBtn,
   pauseScreenEl,
+  resumeBtn,
   winnerTextEl,
 } from "./dom";
 import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena } from "./arena";
@@ -106,6 +107,8 @@ export class RagdollGame {
   private goalResetTimeout: number | null = null; // id таймаута сброса раунда после гола
   private goalTextTimeout: number | null = null; // id таймаута скрытия надписи «ГОЛ!»
   private slowmoRafId: number | null = null; // id анимации плавного входа в слоу-мо
+  private arenaSize = { w: 0, h: 0 }; // текущие размеры арены (для пересборки при ресайзе)
+  private resizeTimeout: number | null = null; // id таймаута дебаунса ресайза
 
   constructor() {
     // Создаём физический движок с гравитацией из конфигурации
@@ -143,7 +146,14 @@ export class RagdollGame {
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.arena = createArena(width, height);
-    World.add(this.world, [
+    this.arenaSize = { w: width, h: height };
+    World.add(this.world, this.arenaBodies());
+  }
+
+  // Возвращает список всех статичных тел арены
+  // (используется и при создании, и при пересборке).
+  private arenaBodies(): Body[] {
+    return [
       this.arena.ground,
       this.arena.leftWall,
       this.arena.rightWall,
@@ -158,7 +168,43 @@ export class RagdollGame {
       this.arena.goalRightSideFiller,
       this.arena.goalLeftBackWall,
       this.arena.goalRightBackWall,
-    ]);
+    ];
+  }
+
+  // Обрабатывает изменение размера окна (в том числе поворот телефона):
+  // обновляет канвас с учётом devicePixelRatio, а если размеры реально
+  // изменились — пересобирает арену под них.
+  private handleResize(): void {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    this.render.options.width = width;
+    this.render.options.height = height;
+    this.render.bounds.max.x = width;
+    this.render.bounds.max.y = height;
+    Render.setPixelRatio(this.render, this.render.options.pixelRatio ?? 1);
+
+    if (width === this.arenaSize.w && height === this.arenaSize.h) return;
+    this.rebuildArena(width, height);
+  }
+
+  // Пересобирает статичную арену под новые размеры и возвращает мяч
+  // и игроков в корректные позиции. Счёт, время, фаза и размер мяча
+  // при этом сохраняются.
+  private rebuildArena(width: number, height: number): void {
+    World.remove(this.world, this.arenaBodies());
+    this.arena = createArena(width, height);
+    World.add(this.world, this.arenaBodies());
+
+    // Если ворота уже подняты (фаза 2+) — сразу ставим их верхнее положение
+    if (this.phase >= 2) {
+      setGoalPositions(this.arena, this.world, width, height, getGoalYTop(height));
+    }
+
+    this.arenaSize = { w: width, h: height };
+    this.jumpQueued = { p1: false, p2: false };
+    this.resetBall();
+    this.spawnPlayers();
   }
 
   // Поднимает ворота вверх (фаза 2) и усиливает прыжок.
@@ -421,7 +467,7 @@ export class RagdollGame {
   }
 
   // Переключает паузу (останавливает/запускает физику).
-  private togglePause(): void {
+  public togglePause(): void {
     if (!this.running || this.gameEnded) return;
     this.paused = !this.paused;
     if (this.paused) {
@@ -436,6 +482,29 @@ export class RagdollGame {
       document.body.classList.remove("paused");
       pauseScreenEl.classList.add("hidden");
     }
+  }
+
+  // --- Публичный API для мобильного управления (src/mobile.ts) ---
+
+  // Зажимает/отпускает «виртуальную клавишу» — так джойстик на
+  // тач-экране управляет движением точно так же, как клавиатура.
+  public setVirtualKey(code: string, active: boolean): void {
+    if (active) this.keys.add(code);
+    else this.keys.delete(code);
+  }
+
+  // Ставит в очередь прыжок игрока (джойстик отклонён вверх).
+  // Прыжок сработает в ближайшем кадре, если сейчас это уместно
+  // (идёт матч, не пауза, не состояние «гол»).
+  public queueJump(player: 1 | 2): void {
+    if (!this.running || this.gameEnded || this.paused || this.goalLocked) return;
+    if (player === 1) this.jumpQueued.p1 = true;
+    else this.jumpQueued.p2 = true;
+  }
+
+  // Ставит игру на паузу при перевороте устройства в портретный режим.
+  public pauseForOrientation(): void {
+    if (this.running && !this.paused && !this.gameEnded) this.togglePause();
   }
 
   // Подключает обработчики событий движка (голы, управление, ресайз).
@@ -579,10 +648,14 @@ export class RagdollGame {
       }
     });
 
-    // При изменении размера окна подстраиваем размер canvas
+    // При изменении размера окна (в том числе повороте телефона):
+    // дебаунсим, затем обновляем канвас и при необходимости пересобираем арену
     window.addEventListener("resize", () => {
-      this.render.canvas.width = window.innerWidth;
-      this.render.canvas.height = window.innerHeight;
+      if (this.resizeTimeout !== null) clearTimeout(this.resizeTimeout);
+      this.resizeTimeout = window.setTimeout(() => {
+        this.resizeTimeout = null;
+        this.handleResize();
+      }, 200);
     });
   }
 
@@ -617,6 +690,12 @@ export class RagdollGame {
       if (!this.running && !this.gameEnded) this.startGame();
     });
 
+    // Кнопка «Продолжить» на экране паузы (без неё на тач-устройствах
+    // нечем снять паузу — там нет клавиши ESC)
+    resumeBtn.addEventListener("click", () => {
+      this.togglePause();
+    });
+
     // Кнопка «Играть снова» — полный сброс матча
     restartBtn.addEventListener("click", () => {
       this.score = { p1: 0, p2: 0 };
@@ -626,6 +705,7 @@ export class RagdollGame {
       this.running = false;
       this.paused = false;
       this.goalLocked = false;
+      this.keys.clear(); // сбрасываем зажатые клавиши (в т.ч. «виртуальные» от джойстиков)
       this.phase4SecondsLeft = 0; // сбрасываем таймер фазы 4
       this.phase4Started = false; // фаза 4 снова сможет наступить в новом матче
       if (this.ballScale !== 1) {

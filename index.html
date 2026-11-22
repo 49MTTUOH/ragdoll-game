@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Ragdoll Duel - Пинай мяч!</title>
   <link rel="stylesheet" href="/src/style.css">
 </head>
@@ -20,9 +20,13 @@
 
     <div id="start-screen" class="overlay">
       <h1>⚽ RAGDOLL DUEL ⚽</h1>
-      <div class="controls">
+      <div class="controls" id="kbd-controls">
         <span style="color: #4cc9f0">Игрок 1:</span> W (Прыжок), A (Влево), D (Вправо)<br>
         <span style="color: #ff4d6d">Игрок 2:</span> ↑ (Прыжок), ← (Влево), → (Вправо)
+      </div>
+      <div class="controls" id="touch-controls">
+        <span style="color: #4cc9f0">Игрок 1 (слева):</span> коснись экрана слева — появится джойстик, толкни вверх — прыжок<br>
+        <span style="color: #ff4d6d">Игрок 2 (справа):</span> то же самое — касание и джойстик справа
       </div>
       <button class="btn" id="start-btn">НАЧАТЬ (Пробел)</button>
     </div>
@@ -34,8 +38,17 @@
 
     <div id="pause-screen" class="overlay hidden">
       <h1>⏸ ПАУЗА</h1>
-      <p class="controls">Нажмите ESC, чтобы продолжить</p>
+      <p class="controls">Нажмите ESC или кнопку ниже, чтобы продолжить</p>
+      <button class="btn" id="resume-btn">ПРОДОЛЖИТЬ</button>
     </div>
+  </div>
+
+  <!-- Мобильные слои (показываются только на тач-устройствах) -->
+  <button id="pause-btn" type="button" aria-label="Пауза">⏸</button>
+  <div id="joystick-layer"></div>
+  <div id="rotate-screen" class="hidden">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-text">Поверните устройство<br>горизонтально</div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

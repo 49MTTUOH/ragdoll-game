@@ -1,5 +1,13 @@
-body { margin: 0; padding: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
-canvas { display: block; }
+html, body {
+  margin: 0; padding: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif;
+  /* Мобильное: запрещаем скролл и масштабирование пальцами */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+canvas { display: block; touch-action: none; }
 
 #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 .score-board { 
@@ -55,6 +63,7 @@ body.paused #double-jump-hint { animation-play-state: paused; }
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
   background: rgba(0,0,0,0.7); display: flex; flex-direction: column; 
   justify-content: center; align-items: center; color: white; pointer-events: auto;
+  z-index: 60; /* поверх джойстиков (30) и кнопки паузы (40) */
 }
 .hidden { display: none !important; }
 
@@ -289,3 +298,120 @@ h1 {
 /* Во время Esc-паузы CSS-анимация надписи замирает
    (конфетти на WAAPI замирают через anim.pause() в game.ts) */
 body.paused #goal-text.goal-celebration { animation-play-state: paused; }
+
+/* ============================================================
+   МОБИЛЬНАЯ АДАПТАЦИЯ
+   ============================================================ */
+
+/* --- Плавающие джойстики ---
+   Основание и ручка создаются в точке касания (mobile.ts).
+   Слой полностью «прозрачен» для касаний — ввод идёт
+   через pointer-события на window. */
+#joystick-layer {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 30;
+  pointer-events: none;
+}
+.joystick-base {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.45);
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.3) 100%);
+  pointer-events: none;
+}
+.joystick-base[data-player="1"] {
+  border-color: rgba(76, 201, 240, 0.75);
+  box-shadow: 0 0 18px rgba(76, 201, 240, 0.35);
+}
+.joystick-base[data-player="2"] {
+  border-color: rgba(255, 77, 109, 0.75);
+  box-shadow: 0 0 18px rgba(255, 77, 109, 0.35);
+}
+.joystick-knob {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.joystick-knob[data-player="1"] { background: rgba(76, 201, 240, 0.85); }
+.joystick-knob[data-player="2"] { background: rgba(255, 77, 109, 0.85); }
+
+/* --- Кнопка паузы (только тач-устройства) ---
+   Стоит в правом верхнем углу с учётом «чёлки» (safe-area). */
+#pause-btn {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  z-index: 40;
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  display: none;
+}
+body.touch-device #pause-btn { display: block; }
+
+/* --- Оверлей «Поверните устройство» --- */
+#rotate-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 100;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px;
+  background: rgba(8, 10, 24, 0.96);
+  color: #fff;
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.5;
+  pointer-events: auto;
+}
+#rotate-screen .rotate-icon {
+  font-size: 72px;
+  animation: rotate-device 2s ease-in-out infinite;
+}
+@keyframes rotate-device {
+  0%, 15%  { transform: rotate(0deg); }
+  55%, 85% { transform: rotate(90deg); }
+  100%     { transform: rotate(0deg); }
+}
+
+/* --- Подсказки управления: клавиатура или джойстики --- */
+#touch-controls { display: none; }
+body.touch-device #touch-controls { display: block; }
+body.touch-device #kbd-controls { display: none; }
+
+/* ============================================================
+   КОМПАКТНЫЙ ИНТЕРФЕЙС ДЛЯ НИЗКИХ ЭКРАНОВ
+   (горизонтальный телефон ~390px по высоте)
+   ============================================================ */
+@media (max-height: 560px) {
+  .score-board { top: 6px; font-size: 30px; }
+  .timer { top: 44px; font-size: 22px; }
+  #double-jump-hint { top: 76px; font-size: 13px; padding: 4px 12px; }
+  #goal-text { font-size: 48px; }
+  #goal-text.goal-celebration { font-size: 72px; letter-spacing: 2px; }
+  h1 { font-size: 40px; margin-bottom: 12px; }
+  .controls { font-size: 15px; margin-bottom: 16px; line-height: 1.5; }
+  .btn { padding: 10px 28px; font-size: 18px; }
+  #rotate-screen { font-size: 18px; gap: 12px; }
+  #rotate-screen .rotate-icon { font-size: 56px; }
+}
+@media (max-height: 400px) {
+  .score-board { top: 4px; font-size: 24px; }
+  .timer { top: 34px; font-size: 18px; }
+  #double-jump-hint { top: 58px; font-size: 11px; padding: 3px 10px; }
+  #goal-text { font-size: 40px; }
+  #goal-text.goal-celebration { font-size: 56px; }
+  h1 { font-size: 32px; margin-bottom: 8px; }
+  .controls { font-size: 13px; margin-bottom: 10px; line-height: 1.45; }
+  .btn { padding: 8px 22px; font-size: 16px; }
+  #pause-btn { width: 40px; height: 40px; font-size: 17px; }
+}
