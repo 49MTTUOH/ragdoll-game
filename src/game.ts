@@ -124,14 +124,16 @@ export class RagdollGame {
 
   constructor(private readonly touchDevice: boolean) {
     this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
-    this.movementScale = touchDevice ? TOUCH_MOVEMENT_SCALE : 1;
+    this.movementScale = this.arenaScale * (touchDevice ? TOUCH_MOVEMENT_SCALE : 1);
     this.normalTimeScale = touchDevice ? TOUCH_PHYSICS_TIME_SCALE : 1;
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.arenaSize = { w: width * this.arenaScale, h: height * this.arenaScale };
 
-    // Создаём физический движок с гравитацией из конфигурации
-    this.engine = Engine.create({ gravity: GRAVITY });
+    // На увеличенной арене одному пикселю соответствует больше единиц мира.
+    this.engine = Engine.create({
+      gravity: { x: GRAVITY.x * this.arenaScale, y: GRAVITY.y * this.arenaScale },
+    });
     this.engine.timing.timeScale = this.normalTimeScale;
     this.world = this.engine.world;
 
@@ -638,6 +640,7 @@ export class RagdollGame {
       // --- Управление игроками (полностью отключено в состоянии «гол») ---
       if (!this.goalLocked) {
         const moveForce = MOVE_FORCE * this.movementScale;
+        const jumpVelocity = this.jumpVelocity * this.arenaScale;
         // --- Управление Игроком 1 (A / D / W) ---
         if (this.keys.has(KEYS.player1.left)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: -moveForce, y: 0 });
@@ -650,10 +653,10 @@ export class RagdollGame {
             // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
             resetJumps(this.player1);
             if (this.phase >= 3) tryConsumeJump(this.player1); // в фазе 3 земной прыжок расходует один из двух
-            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: jumpVelocity });
           } else if (this.phase >= 3 && tryConsumeJump(this.player1)) {
             // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
-            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: this.jumpVelocity });
+            Body.setVelocity(this.player1.body, { x: this.player1.body.velocity.x, y: jumpVelocity });
           }
         }
         this.jumpQueued.p1 = false;
@@ -670,10 +673,10 @@ export class RagdollGame {
             // Обычный (земной) прыжок: счётчик прыжков сбрасывается при касании земли
             resetJumps(this.player2);
             if (this.phase >= 3) tryConsumeJump(this.player2); // в фазе 3 земной прыжок расходует один из двух
-            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: jumpVelocity });
           } else if (this.phase >= 3 && tryConsumeJump(this.player2)) {
             // Двойной прыжок (только с фазы 3): второй прыжок в воздухе
-            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: this.jumpVelocity });
+            Body.setVelocity(this.player2.body, { x: this.player2.body.velocity.x, y: jumpVelocity });
           }
         }
         this.jumpQueued.p2 = false;
@@ -691,9 +694,9 @@ export class RagdollGame {
       // сам придаём ему вертикальную скорость, чтобы он не переставал прыгать
       const ballBottom = this.ball.position.y + BALL_RADIUS * this.ballScale;
       const ballNearGround = ballBottom >= groundY - BALL_AUTO_BOUNCE_GROUND_TOLERANCE;
-      const ballVerticalSpeedSlow = Math.abs(this.ball.velocity.y) < BALL_AUTO_BOUNCE_SPEED_THRESHOLD;
+      const ballVerticalSpeedSlow = Math.abs(this.ball.velocity.y) < BALL_AUTO_BOUNCE_SPEED_THRESHOLD * this.arenaScale;
       if (ballNearGround && ballVerticalSpeedSlow) {
-        Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: BALL_AUTO_BOUNCE_VELOCITY });
+        Body.setVelocity(this.ball, { x: this.ball.velocity.x, y: BALL_AUTO_BOUNCE_VELOCITY * this.arenaScale });
       }
     });
 
