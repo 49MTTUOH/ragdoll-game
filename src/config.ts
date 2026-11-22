@@ -15,7 +15,7 @@ export const GROUND_HEIGHT = 60; // высота земли (пола)
 export const WALL_THICKNESS = 40; // толщина боковых и верхней стен
 export const ARENA_EXTRA_WIDTH = 400; // насколько стены шире экрана (чтобы не было щелей при движении)
 export const GROUND_FRICTION = 0.8; // трение о землю
-export const TOUCH_ARENA_SCALE = 1.4; // сколько единиц арены видно на один CSS-пиксель
+export const TOUCH_ARENA_SCALE = 1.85; // сколько единиц арены видно на один CSS-пиксель
 
 // ---------- ВОРОТА ----------
 // Геометрия ворот и датчиков гола.
@@ -93,7 +93,7 @@ export const STABILIZE_ANGLE_THRESHOLD = 0.3; // порог угла для га
 export const STABILIZE_ANGULAR_VELOCITY = 0.05; // порог угловой скорости для гашения
 export const STABILIZE_DAMPING = 0.7; // коэффициент гашения вращения (0.7 = гасим 30% за кадр)
 export const MAX_PLAYER_SPEED = 8; // максимальная скорость игрока (ограничение)
-export const TOUCH_MOVEMENT_SCALE = 0.85; // множитель силы движения и предельной скорости на тач-экранах
+export const TOUCH_MOVEMENT_SCALE = 0.72; // множитель силы движения и предельной скорости на тач-экранах
 
 // ---------- ИГРОВЫЕ ЗОНЫ И ФАЗЫ ----------
 // Правила матча: зона прыжка, переходы между фазами, длительность.
