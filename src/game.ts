@@ -21,6 +21,7 @@ import {
   JUMP_VELOCITY_GOALS_UP,
   MOVE_FORCE,
   TOUCH_ARENA_SCALE,
+  TOUCH_JUMP_STRENGTH,
   TOUCH_PLAYER_JUMP_SCALE,
   TOUCH_PLAYER_HIGH_JUMP_SCALE,
   TOUCH_PLAYER_CEILING_CLEARANCE,
@@ -41,6 +42,7 @@ import {
   BALL_FRICTION,
   BALL_FRICTION_AIR,
   BALL_RESTITUTION,
+  TOUCH_BALL_RESTITUTION,
   BALL_DENSITY,
   BALL_STROKE_WIDTH,
   BALL_AUTO_BOUNCE_VELOCITY,
@@ -131,7 +133,8 @@ export class RagdollGame {
 
   constructor(private readonly touchDevice: boolean) {
     this.arenaScale = touchDevice ? TOUCH_ARENA_SCALE : 1;
-    this.ballBounceVelocity = BALL_AUTO_BOUNCE_VELOCITY * this.arenaScale * (touchDevice ? TOUCH_BALL_BOUNCE_SCALE : 1);
+    const bounceScale = touchDevice ? TOUCH_BALL_BOUNCE_SCALE * TOUCH_JUMP_STRENGTH : 1;
+    this.ballBounceVelocity = BALL_AUTO_BOUNCE_VELOCITY * this.arenaScale * bounceScale;
     this.movementScale = this.arenaScale * (touchDevice ? TOUCH_MOVEMENT_SCALE : 1);
     this.normalTimeScale = touchDevice ? TOUCH_PHYSICS_TIME_SCALE : 1;
     const width = window.innerWidth;
@@ -328,7 +331,7 @@ export class RagdollGame {
       label: LABELS.ball,
       friction: BALL_FRICTION,
       frictionAir: BALL_FRICTION_AIR,
-      restitution: BALL_RESTITUTION,
+      restitution: this.touchDevice ? TOUCH_BALL_RESTITUTION : BALL_RESTITUTION,
       density: BALL_DENSITY,
       render: { fillStyle: COLORS.ball, strokeStyle: COLORS.ballStroke, lineWidth: BALL_STROKE_WIDTH },
     });
@@ -375,7 +378,7 @@ export class RagdollGame {
       const clearance = body.position.y - radius - TOUCH_PLAYER_CEILING_CLEARANCE * this.arenaScale;
       if (clearance <= 0) return;
       const gravityPerStep = this.engine.gravity.y * this.engine.gravity.scale * PHYSICS_STEP_MS ** 2;
-      speed = Math.max(speed * this.arenaScale * scale, -Math.sqrt(2 * gravityPerStep * clearance));
+      speed = Math.max(speed * this.arenaScale * scale, -Math.sqrt(2 * gravityPerStep * clearance)) * TOUCH_JUMP_STRENGTH;
     }
 
     if (onGround) resetJumps(player);
@@ -386,7 +389,9 @@ export class RagdollGame {
   private limitPlayerSpeed(body: Body): void {
     const maxHorizontal = MAX_PLAYER_SPEED * this.movementScale;
     const maxFall = this.touchDevice ? TOUCH_PLAYER_MAX_FALL_SPEED * this.arenaScale : Infinity;
-    const maxRise = this.touchDevice ? -JUMP_VELOCITY_GOALS_UP * this.arenaScale * TOUCH_PLAYER_HIGH_JUMP_SCALE : Infinity;
+    const maxRise = this.touchDevice
+      ? -JUMP_VELOCITY_GOALS_UP * this.arenaScale * TOUCH_PLAYER_HIGH_JUMP_SCALE * TOUCH_JUMP_STRENGTH
+      : Infinity;
     const { x, y } = body.velocity;
     const cappedX = Math.max(-maxHorizontal, Math.min(maxHorizontal, x));
     const cappedY = Math.max(-maxRise, Math.min(maxFall, y));
