@@ -124,6 +124,7 @@ export class RagdollGame {
   private phase4Started = false; // начиналась ли уже фаза 4 в этом матче (чтобы не запускалась повторно)
   private ballScale = 1; // текущий масштаб мяча относительно BALL_RADIUS (для корректного возврата размера)
   private jumpQueued = { p1: false, p2: false }; // запрошенные прыжки (срабатывают при касании земли)
+  private jumpHeld = { p1: false, p2: false }; // джойстики, удерживаемые вверх
   private goalLocked = false; // заблокирован ли счёт голов (пока идёт сброс раунда после гола)
   private goalResetTimeout: number | null = null; // id таймаута сброса раунда после гола
   private goalTextTimeout: number | null = null; // id таймаута скрытия надписи «ГОЛ!»
@@ -363,9 +364,9 @@ export class RagdollGame {
     );
   }
 
-  private jumpPlayer(player: Player): void {
+  private jumpPlayer(player: Player, allowAirJump: boolean): void {
     const onGround = this.isPlayerOnGround(player);
-    if (!onGround && this.phase < 3) return;
+    if (!onGround && (!allowAirJump || this.phase < 3)) return;
 
     const body = player.body;
     let speed = this.jumpVelocity;
@@ -597,13 +598,13 @@ export class RagdollGame {
     else this.keys.delete(code);
   }
 
-  // Ставит в очередь прыжок игрока (джойстик отклонён вверх).
-  // Прыжок сработает в ближайшем кадре, если сейчас это уместно
-  // (идёт матч, не пауза, не состояние «гол»).
-  public queueJump(player: 1 | 2): void {
-    if (!this.running || this.gameEnded || this.paused || this.goalLocked) return;
-    if (player === 1) this.jumpQueued.p1 = true;
-    else this.jumpQueued.p2 = true;
+  // Удержание повторяет прыжок с земли. Новый жест может запустить прыжок в воздухе.
+  public setJumpHeld(player: 1 | 2, held: boolean): void {
+    const key = player === 1 ? "p1" : "p2";
+    this.jumpHeld[key] = held;
+    if (held && this.running && !this.gameEnded && !this.paused && !this.goalLocked) {
+      this.jumpQueued[key] = true;
+    }
   }
 
   // Ставит игру на паузу при перевороте устройства в портретный режим.
@@ -700,7 +701,7 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player1.right)) {
           Body.applyForce(this.player1.body, this.player1.body.position, { x: moveForce, y: 0 });
         }
-        if (this.jumpQueued.p1) this.jumpPlayer(this.player1);
+        if (this.jumpQueued.p1 || this.jumpHeld.p1) this.jumpPlayer(this.player1, this.jumpQueued.p1);
         this.jumpQueued.p1 = false;
 
         // --- Управление Игроком 2 (← / → / ↑) ---
@@ -710,7 +711,7 @@ export class RagdollGame {
         if (this.keys.has(KEYS.player2.right)) {
           Body.applyForce(this.player2.body, this.player2.body.position, { x: moveForce, y: 0 });
         }
-        if (this.jumpQueued.p2) this.jumpPlayer(this.player2);
+        if (this.jumpQueued.p2 || this.jumpHeld.p2) this.jumpPlayer(this.player2, this.jumpQueued.p2);
         this.jumpQueued.p2 = false;
       }
 
