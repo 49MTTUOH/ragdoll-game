@@ -81,7 +81,8 @@ export const PLAYER_DENSITY = 0.0025; // плотность персонажа
 // ---------- ФИЗИКА ----------
 // Настройки физического движка Matter.js: гравитация,
 // прыжки, движение и стабилизация персонажей.
-export const TOUCH_PHYSICS_TIME_SCALE = 1; // темп физики на тач-экранах
+export const TOUCH_PHYSICS_TIME_SCALE = 0.9; // темп физики на тач-экранах
+export const TOUCH_JUMP_SCALE = 0.9; // множитель скорости прыжка игроков и автоподскока мяча на тач-экранах
 export const GRAVITY = { x: 0, y: 1.2 }; // гравитация (y > 0 = притяжение вниз)
 export const JUMP_VELOCITY = -18; // скорость прыжка (отрицательная = вверх)
 export const JUMP_VELOCITY_GOALS_UP = -21; // скорость прыжка, когда ворота подняты (фаза 2 и 3) — чуть слабее обычного усиления
@@ -94,7 +95,7 @@ export const STABILIZE_ANGLE_THRESHOLD = 0.3; // порог угла для га
 export const STABILIZE_ANGULAR_VELOCITY = 0.05; // порог угловой скорости для гашения
 export const STABILIZE_DAMPING = 0.7; // коэффициент гашения вращения (0.7 = гасим 30% за кадр)
 export const MAX_PLAYER_SPEED = 8; // максимальная скорость игрока (ограничение)
-export const TOUCH_MOVEMENT_SCALE = 1; // множитель силы движения и предельной скорости на тач-экранах
+export const TOUCH_MOVEMENT_SCALE = 0.92; // множитель силы движения и предельной скорости на тач-экранах
 
 // ---------- ИГРОВЫЕ ЗОНЫ И ФАЗЫ ----------
 // Правила матча: зона прыжка, переходы между фазами, длительность.
