@@ -5,7 +5,7 @@
 //    управляет Игроком 1, правой — Игроком 2. Джойстик
 //    появляется в точке касания и исчезает при отрыве пальца:
 //      • горизонтальное отклонение — движение влево/вправо;
-//      • отклонение вверх — прыжок (один раз за отведение).
+//      • удержание вверх — повторный прыжок при приземлении.
 //
 // 2. Ориентация: на тач-устройствах в портретном режиме
 //    показывается оверлей «Поверните устройство», а игра
@@ -23,15 +23,16 @@ import { joystickLayerEl, pauseBtn, rotateScreenEl } from "./dom";
 // API игры, необходимый мобильному управлению.
 export interface MobileGameApi {
   setVirtualKey(code: string, active: boolean): void; // зажать/отпустить «клавишу»
-  queueJump(player: 1 | 2): void; // запросить прыжок
+  setJumpHeld(player: 1 | 2, held: boolean): void; // удерживать или отпустить прыжок
   togglePause(): void; // переключить паузу
   pauseForOrientation(): void; // включить паузу из-за поворота устройства
 }
 
 // --- Настройки джойстика ---
-const BASE_DIAMETER = 130; // диаметр основания (px)
-const KNOB_DIAMETER = 56; // диаметр ручки (px)
-const TRAVEL_RADIUS = 42; // максимальное отклонение ручки от центра (px)
+const BASE_DIAMETER = 88; // диаметр основания (px)
+const KNOB_DIAMETER = 38; // диаметр ручки (px)
+const KNOB_TRAVEL_RADIUS = (BASE_DIAMETER - KNOB_DIAMETER) / 2;
+const INPUT_RADIUS = 42; // расстояние от точки касания до полного отклонения (px)
 const DEADZONE = 0.3; // мёртвая зона: внутри неё игрок стоит на месте
 const JUMP_UP_THRESHOLD = 0.45; // отклонение вверх, при котором срабатывает прыжок
 const JUMP_RESET_THRESHOLD = 0.25; // палец опустился ниже — можно прыгать снова
@@ -43,7 +44,7 @@ interface Stick {
   originY: number;
   base: HTMLDivElement; // основание
   knob: HTMLDivElement; // ручка
-  jumpArmed: boolean; // можно ли снова засчитать прыжок (после возврата пальца вниз)
+  jumpHeld: boolean;
 }
 
 const activeSticks = new Map<number, Stick>(); // pointerId → джойстик
@@ -62,7 +63,6 @@ export function isTouchDevice(): boolean {
 // Настраивает мобильное управление. Вызывается один раз из main.ts.
 export function setupMobile(game: MobileGameApi): void {
   api = game;
-  if (!isTouchDevice()) return; // десктоп: только клавиатура
 
   document.body.classList.add("touch-device");
 
@@ -142,22 +142,21 @@ function spawnStick(pointerId: number, player: 1 | 2, x: number, y: number): voi
   knob.style.top = y + "px";
 
   joystickLayerEl.append(base, knob);
-  activeSticks.set(pointerId, { player, originX: x, originY: y, base, knob, jumpArmed: true });
+  activeSticks.set(pointerId, { player, originX: x, originY: y, base, knob, jumpHeld: false });
 }
 
 function updateStick(stick: Stick, x: number, y: number): void {
   const dx = x - stick.originX;
   const dy = y - stick.originY;
-  const distance = Math.hypot(dx, dy) || 1;
-  const travel = Math.min(distance, TRAVEL_RADIUS);
+  const distance = Math.max(Math.hypot(dx, dy), INPUT_RADIUS);
 
   // Нормализованное отклонение ручки: -1..1 по каждой оси
-  const nx = ((dx / distance) * travel) / TRAVEL_RADIUS;
-  const ny = ((dy / distance) * travel) / TRAVEL_RADIUS;
+  const nx = dx / distance;
+  const ny = dy / distance;
 
-  // Ручка следует за пальцем (но не дальше TRAVEL_RADIUS)
-  const knobX = stick.originX + (dx / distance) * travel;
-  const knobY = stick.originY + (dy / distance) * travel;
+  // Ручка показывает отклонение в пределах основания.
+  const knobX = stick.originX + nx * KNOB_TRAVEL_RADIUS;
+  const knobY = stick.originY + ny * KNOB_TRAVEL_RADIUS;
   stick.knob.style.left = knobX + "px";
   stick.knob.style.top = knobY + "px";
 
@@ -166,15 +165,11 @@ function updateStick(stick: Stick, x: number, y: number): void {
   api?.setVirtualKey(codes.left, nx < -DEADZONE);
   api?.setVirtualKey(codes.right, nx > DEADZONE);
 
-  // Отклонение вверх — прыжок: срабатывает один раз,
-  // пока палец не вернётся из «зоны прыжка» вниз.
-  if (ny < -JUMP_UP_THRESHOLD) {
-    if (stick.jumpArmed) {
-      stick.jumpArmed = false;
-      api?.queueJump(stick.player);
-    }
-  } else if (ny > -JUMP_RESET_THRESHOLD) {
-    stick.jumpArmed = true;
+  // Разные пороги включения и отпускания защищают от дрожания пальца.
+  const jumpHeld = stick.jumpHeld ? ny <= -JUMP_RESET_THRESHOLD : ny < -JUMP_UP_THRESHOLD;
+  if (jumpHeld !== stick.jumpHeld) {
+    stick.jumpHeld = jumpHeld;
+    api?.setJumpHeld(stick.player, jumpHeld);
   }
 }
 
@@ -188,6 +183,7 @@ function removeStick(pointerId: number): void {
   const codes = stick.player === 1 ? KEYS.player1 : KEYS.player2;
   api?.setVirtualKey(codes.left, false);
   api?.setVirtualKey(codes.right, false);
+  api?.setJumpHeld(stick.player, false);
 }
 
 function hasStickFor(player: 1 | 2): boolean {

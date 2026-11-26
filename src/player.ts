@@ -54,7 +54,7 @@ export function tryConsumeJump(player: Player): boolean {
 
 // Создаёт ragdoll-персонажа в точке (x, y) и добавляет его в мир.
 // Возвращает объект Player.
-export function createPlayer(world: World, x: number, y: number, color: string): Player {
+export function createPlayer(world: World, x: number, y: number, color: string, restitution = PLAYER_RESTITUTION): Player {
   // Голова (прямоугольная)
   const head = Bodies.rectangle(x, y - PLAYER_HEAD_OFFSET_Y, PLAYER_HEAD_SIZE, PLAYER_HEAD_SIZE, {
     friction: PLAYER_HEAD_FRICTION,
@@ -83,7 +83,7 @@ export function createPlayer(world: World, x: number, y: number, color: string):
   const compound = Body.create({
     parts: [head, body, legs],
     friction: PLAYER_FRICTION,
-    restitution: PLAYER_RESTITUTION,
+    restitution,
     density: PLAYER_DENSITY,
     render: { fillStyle: color },
   });

@@ -19,8 +19,6 @@ import {
   CONFETTI_GRAVITY,
   CONFETTI_MIN_DURATION_MS,
   CONFETTI_MAX_DURATION_MS,
-  GOAL_WIDTH,
-  GROUND_HEIGHT,
 } from "./config";
 import { confettiLayerEl } from "./dom";
 
@@ -29,13 +27,9 @@ const activeAnimations = new Set<Animation>(); // все запущенные а
 export type GoalSide = "left" | "right"; // ворота, из которых вылетают конфетти
 
 // Запускает хлопушки из указанных ворот (вызывается в момент гола).
-export function burstConfetti(side: GoalSide): void {
+export function burstConfetti(side: GoalSide, originX: number, originY: number): void {
   clearConfetti(); // на случай, если прошлый эффект ещё не закончился
 
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-  const originX = side === "left" ? GOAL_WIDTH / 2 : width - GOAL_WIDTH / 2;
-  const originY = height - GROUND_HEIGHT - 40; // чуть выше земли, у устья ворот
   const dirX = side === "left" ? 1 : -1; // направление внутрь поля
 
   for (let i = 0; i < CONFETTI_COUNT; i++) {
