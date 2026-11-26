@@ -39,7 +39,7 @@ export const BALL_FRICTION_AIR = 0.002; // сопротивление возду
 export const BALL_RESTITUTION = 1.0; // упругость (1.0 = отскакивает без потери энергии)
 export const TOUCH_BALL_RESTITUTION = 0.94; // упругость мяча на тач-экранах
 export const BALL_DENSITY = 0.0008; // плотность (влияет на массу)
-export const BALL_STROKE_WIDTH = 3; // толщина обводки мяча
+export const BALL_STROKE_WIDTH = 2; // толщина обводки мяча
 export const BALL_AUTO_BOUNCE_VELOCITY = -15; // скорость подскока мяча, когда он перестал прыгать (отрицательная = вверх)
 export const TOUCH_BALL_BOUNCE_SCALE = 0.9; // множитель скорости автоподскока мяча на тач-экранах
 export const BALL_AUTO_BOUNCE_GROUND_TOLERANCE = 2; // допустимый зазор между мячом и полом для автоподскока
@@ -52,17 +52,14 @@ export const PLAYER_1_COLOR = "#4cc9f0"; // цвет игрока 1
 export const PLAYER_2_COLOR = "#ff4d6d"; // цвет игрока 2
 export const PLAYER_1_X_RATIO = 0.3; // стартовая позиция игрока 1 (доля ширины экрана)
 export const PLAYER_2_X_RATIO = 0.7; // стартовая позиция игрока 2 (доля ширины экрана)
-export const PLAYER_SPAWN_OFFSET_Y = 35; // подъём точки спавна над землёй
-export const PLAYER_BODY_OFFSET_Y = 10; // смещение тела вверх от точки спавна
+export const PLAYER_SPAWN_OFFSET_Y = 12.1; // подъём точки спавна над землёй (без ног персонаж ниже)
+export const PLAYER_BODY_OFFSET_Y = 12.1; // смещение тела вверх от точки спавна
 
-// Размеры частей тела (в пикселях)
-export const PLAYER_HEAD_SIZE = 20; // размер головы (квадрат)
-export const PLAYER_BODY_WIDTH = 20; // ширина тела
-export const PLAYER_BODY_HEIGHT = 35; // высота тела
-export const PLAYER_LEGS_WIDTH = 20; // ширина ног
-export const PLAYER_LEGS_HEIGHT = 25; // высота ног
-export const PLAYER_HEAD_OFFSET_Y = 35; // смещение головы вверх от точки спавна
-export const PLAYER_LEGS_OFFSET_Y = 20; // смещение ног вниз от точки спавна
+// Размеры частей тела (в пикселях). Все размеры увеличены ещё на 10%.
+export const PLAYER_HEAD_SIZE = 24.2; // размер головы (квадрат)
+export const PLAYER_BODY_WIDTH = 24.2; // ширина тела
+export const PLAYER_BODY_HEIGHT = 42.35; // высота тела
+export const PLAYER_HEAD_OFFSET_Y = 42.35; // смещение головы вверх от точки спавна
 
 // Физика отдельных частей тела
 export const PLAYER_HEAD_FRICTION = 0.3; // трение головы
@@ -71,9 +68,6 @@ export const PLAYER_HEAD_DENSITY = 0.001; // плотность головы
 export const PLAYER_BODY_FRICTION = 0.4; // трение тела
 export const PLAYER_BODY_RESTITUTION = 0.7; // упругость тела
 export const PLAYER_BODY_DENSITY = 0.002; // плотность тела
-export const PLAYER_LEGS_FRICTION = 0.6; // трение ног
-export const PLAYER_LEGS_RESTITUTION = 0.75; // упругость ног
-export const PLAYER_LEGS_DENSITY = 0.004; // плотность ног
 
 // Физика составного тела (всего персонажа целиком)
 export const PLAYER_FRICTION = 0.5; // трение персонажа
@@ -95,12 +89,13 @@ export const JUMP_VELOCITY = -18; // скорость прыжка (отрица
 export const JUMP_VELOCITY_GOALS_UP = -21; // скорость прыжка, когда ворота подняты (фаза 2 и 3) — чуть слабее обычного усиления
 export const MAX_JUMPS_PHASE_3 = 2; // сколько прыжков доступно игроку в фазе 3 (земной + один в воздухе)
 export const MOVE_FORCE = 0.008; // сила, с которой игрок двигается влево/вправо
-export const UPRIGHT_TORQUE = 0.0008; // сила, выпрямляющая упавшего игрока
-export const UPRIGHT_TORQUE_MULTIPLIER = 100; // множитель выпрямляющего момента
-export const UPRIGHT_ANGLE_THRESHOLD = 0.1; // порог угла наклона, при котором включается выпрямление
-export const STABILIZE_ANGLE_THRESHOLD = 0.3; // порог угла для гашения вращения
+export const UPRIGHT_TORQUE = 0.0012; // сила, выпрямляющая упавшего игрока
+export const UPRIGHT_TORQUE_MULTIPLIER = 250; // множитель выпрямляющего момента
+export const UPRIGHT_ANGLE_THRESHOLD = 0.05; // порог угла наклона, при котором включается выпрямление
+export const MAX_PLAYER_TILT = 0.5; // предельный наклон игрока (рад): не даём фигурке ложиться плашмя
+export const STABILIZE_ANGLE_THRESHOLD = Math.PI; // гасим вращение при любом угле наклона
 export const STABILIZE_ANGULAR_VELOCITY = 0.05; // порог угловой скорости для гашения
-export const STABILIZE_DAMPING = 0.7; // коэффициент гашения вращения (0.7 = гасим 30% за кадр)
+export const STABILIZE_DAMPING = 0.85; // коэффициент гашения вращения (0.85 = гасим 15% за кадр)
 export const MAX_PLAYER_SPEED = 8; // максимальная скорость игрока (ограничение)
 export const TOUCH_MOVEMENT_SCALE = 0.74; // множитель силы движения и предельной скорости на тач-экранах
 

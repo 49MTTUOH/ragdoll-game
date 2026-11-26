@@ -32,6 +32,7 @@ import {
   UPRIGHT_TORQUE,
   UPRIGHT_TORQUE_MULTIPLIER,
   UPRIGHT_ANGLE_THRESHOLD,
+  MAX_PLAYER_TILT,
   STABILIZE_ANGLE_THRESHOLD,
   STABILIZE_ANGULAR_VELOCITY,
   STABILIZE_DAMPING,
@@ -44,7 +45,6 @@ import {
   BALL_RESTITUTION,
   TOUCH_BALL_RESTITUTION,
   BALL_DENSITY,
-  BALL_STROKE_WIDTH,
   BALL_AUTO_BOUNCE_VELOCITY,
   TOUCH_BALL_BOUNCE_SCALE,
   BALL_AUTO_BOUNCE_GROUND_TOLERANCE,
@@ -84,6 +84,8 @@ import {
 } from "./dom";
 import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena } from "./arena";
 import { createPlayer, resetJumps, tryConsumeJump, type Player } from "./player";
+import { drawPlayer, preloadSprites, spritesReady } from "./sprites";
+import { drawSoccerBall } from "./ball";
 import { burstConfetti, clearConfetti, setConfettiPaused } from "./confetti";
 import { reachGoal, GOALS } from "./metrics";
 
@@ -171,6 +173,10 @@ export class RagdollGame {
     this.spawnPlayers();
     this.setupEvents();
     this.setupInputs();
+
+    // Загружаем спрайты персонажей и рисуем их поверх физических тел
+    void preloadSprites();
+    Events.on(this.render, "afterRender", this.drawSprites);
 
     // Запускаем цикл отрисовки и физики
     Render.run(this.render);
@@ -341,7 +347,8 @@ export class RagdollGame {
       frictionAir: BALL_FRICTION_AIR,
       restitution: this.touchDevice ? TOUCH_BALL_RESTITUTION : BALL_RESTITUTION,
       density: BALL_DENSITY,
-      render: { fillStyle: COLORS.ball, strokeStyle: COLORS.ballStroke, lineWidth: BALL_STROKE_WIDTH },
+      // Мяч рисуется вручную в afterRender (см. drawSprites) как футбольный.
+      render: { visible: false },
     });
     World.add(this.world, this.ball);
   }
@@ -356,9 +363,22 @@ export class RagdollGame {
     if (this.player2) World.remove(this.world, this.player2.body);
 
     const restitution = this.touchDevice ? TOUCH_PLAYER_RESTITUTION : undefined;
-    this.player1 = createPlayer(this.world, width * PLAYER_1_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_1_COLOR, restitution);
-    this.player2 = createPlayer(this.world, width * PLAYER_2_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_2_COLOR, restitution);
+    this.player1 = createPlayer(this.world, width * PLAYER_1_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_1_COLOR, "blue", restitution);
+    this.player2 = createPlayer(this.world, width * PLAYER_2_X_RATIO, groundY - PLAYER_SPAWN_OFFSET_Y, PLAYER_2_COLOR, "red", restitution);
   }
+
+  // Рисует мяч и спрайты игроков поверх физических тел
+  // (вызывается после того, как Matter.js отрисовал арену).
+  private drawSprites = (): void => {
+    const ctx = this.render.context;
+
+    // Футбольный мяч рисуем первым, чтобы игроки были поверх него.
+    if (this.ball) drawSoccerBall(ctx, this.ball);
+
+    if (!spritesReady() || !this.player1 || !this.player2) return;
+    drawPlayer(ctx, this.player1.art, this.player1.body);
+    drawPlayer(ctx, this.player2.art, this.player2.body);
+  };
 
   private isPlayerOnGround(player: Player): boolean {
     if (!this.touchDevice) {
@@ -716,6 +736,15 @@ export class RagdollGame {
         let normalizedAngle = angle % (2 * Math.PI);
         if (normalizedAngle > Math.PI) normalizedAngle -= 2 * Math.PI;
         if (normalizedAngle < -Math.PI) normalizedAngle += 2 * Math.PI;
+
+        // Не даём фигурке заваливаться плашмя: ограничиваем максимальный наклон.
+        // Без ног персонаж короткий, и трение при беге легко опрокидывало его.
+        if (Math.abs(normalizedAngle) > MAX_PLAYER_TILT) {
+          const clampedAngle = Math.sign(normalizedAngle) * MAX_PLAYER_TILT;
+          Body.setAngle(p, clampedAngle);
+          Body.setAngularVelocity(p, 0);
+          normalizedAngle = clampedAngle;
+        }
 
         if (Math.abs(normalizedAngle) > UPRIGHT_ANGLE_THRESHOLD) {
           Body.applyForce(p, p.position, { x: 0, y: 0 });
