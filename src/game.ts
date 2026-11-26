@@ -657,17 +657,14 @@ export class RagdollGame {
           this.score.p1++;
           p1ScoreEl.textContent = this.score.p1.toString();
           this.showGoal(UI_TEXT.goalP1, PLAYER_1_COLOR); // красочное празднование в цвете Игрока 1
-<<<<<<< HEAD
-          burstConfetti("right"); // хлопушки из правых ворот, куда забит мяч
+          // Хлопушки вылетают из правых ворот, куда забит мяч
+          const { x, y } = this.arena.goalRightSensor.position;
+          burstConfetti("right", x / this.arenaScale, y / this.arenaScale);
           reachGoal(GOALS.goalScored, {
             scorer: "p1",
             phase: this.phase,
             total: this.score.p1,
           });
-=======
-          const { x, y } = this.arena.goalRightSensor.position;
-          burstConfetti("right", x / this.arenaScale, y / this.arenaScale);
->>>>>>> f6a101e88655b6a9a82cf937f87f09c9c3db8f2d
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -687,17 +684,14 @@ export class RagdollGame {
           this.score.p2++;
           p2ScoreEl.textContent = this.score.p2.toString();
           this.showGoal(UI_TEXT.goalP2, PLAYER_2_COLOR); // красочное празднование в цвете Игрока 2
-<<<<<<< HEAD
-          burstConfetti("left"); // хлопушки из левых ворот, куда забит мяч
+          // Хлопушки вылетают из левых ворот, куда забит мяч
+          const { x, y } = this.arena.goalLeftSensor.position;
+          burstConfetti("left", x / this.arenaScale, y / this.arenaScale);
           reachGoal(GOALS.goalScored, {
             scorer: "p2",
             phase: this.phase,
             total: this.score.p2,
           });
-=======
-          const { x, y } = this.arena.goalLeftSensor.position;
-          burstConfetti("left", x / this.arenaScale, y / this.arenaScale);
->>>>>>> f6a101e88655b6a9a82cf937f87f09c9c3db8f2d
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
