@@ -74,6 +74,7 @@ import {
 import { createArena, setGoalPositions, getGoalYBottom, getGoalYTop, type Arena } from "./arena";
 import { createPlayer, resetJumps, tryConsumeJump, type Player } from "./player";
 import { burstConfetti, clearConfetti, setConfettiPaused } from "./confetti";
+import { reachGoal, GOALS } from "./metrics";
 
 export class RagdollGame {
   // --- Движок и отрисовка ---
@@ -213,6 +214,7 @@ export class RagdollGame {
     this.jumpVelocity = JUMP_VELOCITY_GOALS_UP;
     setGoalPositions(this.arena, this.world, window.innerWidth, window.innerHeight, getGoalYTop(window.innerHeight));
     this.showGoal(UI_TEXT.goalsUp);
+    this.reportPhase(2, true);
   }
 
   // Включает фазу 3: ворота остаются поднятыми (как в фазе 2),
@@ -226,15 +228,20 @@ export class RagdollGame {
     // Постоянный индикатор: двойной прыжок теперь доступен (виден до конца матча)
     doubleJumpHintEl.textContent = UI_TEXT.doubleJumpHint;
     doubleJumpHintEl.classList.remove("hidden");
+    this.reportPhase(3, true);
   }
 
   // Включает фазу 4: мяч становится больше на минуту.
   // Ворота остаются сверху (как в фазах 2 и 3), двойной прыжок сохраняется.
   private setPhase4(): void {
+    // Запоминаем, были ли ворота уже подняты: фаза 4 включается по
+    // времени и может наступить раньше фаз 2 и 3 (если голов мало).
+    const goalsUp = this.phase >= 2;
     this.phase = 4;
     this.phase4SecondsLeft = PHASE_4_DURATION_S;
     this.enlargeBall();
     this.showGoal(UI_TEXT.phase4);
+    this.reportPhase(4, goalsUp);
   }
 
   // Завершает фазу 4: возвращает мячу обычный размер, фаза откатывается к 3
@@ -398,6 +405,18 @@ export class RagdollGame {
     }, PHASE_CHANGE_DELAY_MS);
   }
 
+  // Отправляет в Метрику цель «достигнута фаза».
+  // goalsUp — были ли ворота подняты на момент перехода: фаза 4
+  // включается по времени и может наступить без фаз 2 и 3.
+  private reportPhase(phase: 2 | 3 | 4, goalsUp: boolean): void {
+    reachGoal(GOALS.phaseReached, {
+      phase,
+      goalsUp: goalsUp ? 1 : 0,
+      score: `${this.score.p1}-${this.score.p2}`,
+      elapsed: MATCH_DURATION - this.timeLeft,
+    });
+  }
+
   // Запускает обратный отсчёт времени матча.
   private startTimer(): void {
     if (this.timerId) clearInterval(this.timerId);
@@ -453,6 +472,10 @@ export class RagdollGame {
     } else {
       winnerTextEl.textContent = UI_TEXT.draw;
     }
+    reachGoal(GOALS.matchFinished, {
+      p1: this.score.p1,
+      p2: this.score.p2,
+    });
     this.clearGoalCelebration(); // убираем конфетти и надпись, если матч кончился в момент гола
     gameOverEl.classList.remove("hidden");
   }
@@ -461,6 +484,7 @@ export class RagdollGame {
   public startGame(): void {
     if (this.running) return;
     this.running = true;
+    reachGoal(GOALS.matchStart);
     startScreenEl.classList.add("hidden");
     gameOverEl.classList.add("hidden");
     this.startTimer();
@@ -529,6 +553,11 @@ export class RagdollGame {
           p1ScoreEl.textContent = this.score.p1.toString();
           this.showGoal(UI_TEXT.goalP1, PLAYER_1_COLOR); // красочное празднование в цвете Игрока 1
           burstConfetti("right"); // хлопушки из правых ворот, куда забит мяч
+          reachGoal(GOALS.goalScored, {
+            scorer: "p1",
+            phase: this.phase,
+            total: this.score.p1,
+          });
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -549,6 +578,11 @@ export class RagdollGame {
           p2ScoreEl.textContent = this.score.p2.toString();
           this.showGoal(UI_TEXT.goalP2, PLAYER_2_COLOR); // красочное празднование в цвете Игрока 2
           burstConfetti("left"); // хлопушки из левых ворот, куда забит мяч
+          reachGoal(GOALS.goalScored, {
+            scorer: "p2",
+            phase: this.phase,
+            total: this.score.p2,
+          });
           this.checkPhaseChange();
           if (this.goalResetTimeout) clearTimeout(this.goalResetTimeout);
           this.goalResetTimeout = window.setTimeout(() => {
@@ -698,6 +732,7 @@ export class RagdollGame {
 
     // Кнопка «Играть снова» — полный сброс матча
     restartBtn.addEventListener("click", () => {
+      reachGoal(GOALS.rematch);
       this.score = { p1: 0, p2: 0 };
       p1ScoreEl.textContent = "0";
       p2ScoreEl.textContent = "0";

@@ -4,9 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Ragdoll Duel - Пинай мяч!</title>
+
+  <!-- Yandex.Metrika counter -->
+  <script type="text/javascript">
+    (function(m,e,t,r,i,k,a){
+        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=114691798', 'ym');
+
+    // На localhost счётчик не инициализируем, чтобы не засорять
+    // статистику реальными визитами с машины разработчика.
+    // Отладка целей: откройте игру с параметром ?ym=1.
+    (function () {
+      var isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+      var forced = new URLSearchParams(location.search).has('ym');
+      if (isLocal && !forced) return;
+      ym(114691798, 'init', {
+        webvisor: true,
+        clickmap: true,
+        accurateTrackBounce: true
+      });
+    })();
+  </script>
+  <!-- /Yandex.Metrika counter -->
+
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
+  <!-- Yandex.Metrika counter (noscript-пиксель: только для браузеров без JS) -->
+  <noscript><div><img src="https://mc.yandex.ru/watch/114691798" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+  <!-- /Yandex.Metrika counter -->
+
   <canvas id="canvas"></canvas>
   
   <div id="ui-layer">
